@@ -43,7 +43,7 @@ export default function MainApp() {
   };
 
   const handleTabPress = (tab: any) => {
-    if ((tab === 'profile' || tab === 'chats') && !user) {
+    if ((tab === 'profile' || tab === 'chats') &&!user
       router.push('/auth/login');
       return;
     }
@@ -51,10 +51,10 @@ export default function MainApp() {
   };
 
   const dockItems = [
-    { id: 'feed', icon: <Home size={20} stroke={activeTab === 'feed' ? '#fff' : '#7e8590'} />, label: t.home, onClick: () => handleTabPress('feed') },
-    { id: 'chats', icon: <MessageSquare size={20} stroke={activeTab === 'chats' ? '#fff' : '#7e8590'} />, label: t.chats, onClick: () => handleTabPress('chats') },
-    { id: 'apps', icon: <LayoutGrid size={20} stroke={activeTab === 'apps' ? '#fff' : '#7e8590'} />, label: t.apps, onClick: () => handleTabPress('apps') },
-    { id: 'profile', icon: <User size={20} stroke={activeTab === 'profile' ? '#fff' : '#7e8590'} />, label: t.profile, onClick: () => handleTabPress('profile') },
+    { id: 'feed', icon: <Home size={20} color={activeTab === 'feed' ? '#fff' : '#7e8590'} />, label: t.home, onClick: () => handleTabPress('feed') },
+    { id: 'chats', icon: <MessageSquare size={20} color={activeTab === 'chats' ? '#fff' : '#7e8590'} />, label: t.chats, onClick: () => handleTabPress('chats') },
+    { id: 'apps', icon: <LayoutGrid size={20} color={activeTab === 'apps' ? '#fff' : '#7e8590'} />, label: t.apps, onClick: () => handleTabPress('apps') },
+    { id: 'profile', icon: <User size={20} color={activeTab === 'profile' ? '#fff' : '#7e8590'} />, label: t.profile, onClick: () => handleTabPress('profile') },
   ];
 
   return (
@@ -87,7 +87,7 @@ export default function MainApp() {
 
             {activeTab === 'chats' && (
               <View style={styles.centerPage}>
-                <MessageSquare size={48} stroke="#30363d" />
+                <MessageSquare size={48} color="#30363d" />
                 <Text style={styles.emptyText}>У вас пока нет активных диалогов</Text>
               </View>
             )}
@@ -97,7 +97,7 @@ export default function MainApp() {
                 <Text style={styles.sectionTitle}>Доступные приложения</Text>
                 <View style={styles.appGrid}>
                    <View style={styles.appItem}>
-                      <View style={styles.appIcon}><LayoutGrid size={24} stroke="#fff" /></View>
+                      <View style={styles.appIcon}><LayoutGrid size={24} color="#fff" /></View>
                       <Text style={styles.appLabel}>{t.cluster}</Text>
                    </View>
                 </View>
@@ -118,7 +118,7 @@ export default function MainApp() {
                       router.replace('/auth/login'); 
                     }}
                   >
-                    <LogOut size={18} stroke="#f85149" style={{ marginRight: 8 }} />
+                    <LogOut size={18} color="#f85149" style={{ marginRight: 8 }} />
                     <Text style={styles.logoutText}>{t.signOut}</Text>
                   </TouchableOpacity>
                 </View>

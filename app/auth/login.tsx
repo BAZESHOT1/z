@@ -36,12 +36,12 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={FadeInDown.duration(800)} layout={Layout} style={[styles.card, isDesktop && styles.desktopCard]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <ArrowLeft size={20} stroke="#8b949e" />
+            <ArrowLeft size={20} color="#8b949e" />
           </TouchableOpacity>
 
           <View style={styles.logoArea}>
             <View style={styles.logoBox}>
-              <Terminal size={32} stroke="#fff" />
+              <Terminal size={32} color="#fff" />
             </View>
             <Text style={styles.welcomeTitle}>Вход в Z Platform</Text>
             <Text style={styles.welcomeSub}>Введите свои данные для доступа к сети</Text>
@@ -49,7 +49,7 @@ export default function LoginScreen() {
 
           {error && (
             <Animated.View entering={FadeInDown} style={styles.errorBox}>
-              <AlertCircle size={16} stroke="#f85149" />
+              <AlertCircle size={16} color="#f85149" />
               <Text style={styles.errorText}>{error}</Text>
             </Animated.View>
           )}
@@ -58,7 +58,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Text style={styles.inputLabel}>Логин (Username)</Text>
               <View style={styles.field}>
-                <User size={18} stroke="#8b949e" style={styles.fieldIcon} />
+                <User size={18} color="#8b949e" style={styles.fieldIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Напр. ivan_dev" 
@@ -73,7 +73,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Text style={styles.inputLabel}>Пароль</Text>
               <View style={styles.field}>
-                <Lock size={18} stroke="#8b949e" style={styles.fieldIcon} />
+                <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Ваш секретный пароль" 
@@ -89,11 +89,11 @@ export default function LoginScreen() {
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainBtnText}>Войти</Text>}
             </TouchableOpacity>
 
-            <div style={styles.divider}>
+            <View style={styles.divider}>
               <View style={styles.line} />
               <Text style={styles.dividerText}>ИЛИ</Text>
               <View style={styles.line} />
-            </div>
+            </View>
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/auth/register')}>
               <Text style={styles.secondaryBtnText}>Создать новый аккаунт</Text>
