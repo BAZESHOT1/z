@@ -66,12 +66,8 @@ services:
   # ====== ФРОНТЕНД (веб-версия) ======
   frontend:
     build:
-      context: ./mobile
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL}
-        - VITE_WS_URL=${VITE_WS_URL}
-        - VITE_APP_NAME=${VITE_APP_NAME}
+      context: .
+      dockerfile: mobile/Dockerfile
     container_name: Z-frontend
     ports:
       - "80:80"
