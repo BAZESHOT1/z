@@ -4,7 +4,7 @@ services:
   # ====== БАЗА ДАННЫХ ======
   postgres:
     image: postgres:15-alpine
-    container_name: socialnet-postgres
+    container_name: Z-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -20,12 +20,12 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - socialnet-network
+      - Z-network
 
   # ====== REDIS ======
   redis:
     image: redis:7-alpine
-    container_name: socialnet-redis
+    container_name: Z-redis
     ports:
       - "${REDIS_PORT}:6379"
     healthcheck:
@@ -35,14 +35,14 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - socialnet-network
+      - Z-network
 
   # ====== БЭКЕНД ======
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: socialnet-backend
+    container_name: Z-backend
     ports:
       - "${BACKEND_PORT}:3000"
     environment:
@@ -63,7 +63,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - socialnet-network
+      - Z-network
 
   # ====== ФРОНТЕНД (веб-версия) ======
   frontend:
@@ -74,18 +74,18 @@ services:
         - VITE_API_URL=${VITE_API_URL}
         - VITE_WS_URL=${VITE_WS_URL}
         - VITE_APP_NAME=${VITE_APP_NAME}
-    container_name: socialnet-frontend
+    container_name: Z-frontend
     ports:
       - "80:80"
     depends_on:
       - backend
     restart: unless-stopped
     networks:
-      - socialnet-network
+      - Z-network
 
 # ====== СЕТИ ======
 networks:
-  socialnet-network:
+  Z-network:
     driver: bridge
 
 # ====== ТОМА ======
