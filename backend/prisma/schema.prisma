@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client-node"
 }
 
 datasource db {
@@ -7,53 +7,85 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PrivacyLevel {
+  EVERYONE
+  FRIENDS
+  NOBODY
+}
+
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  email        String?  @unique
-  password     String
-  firstName    String?
-  lastName     String?
-  role         String   @default("user")
-  status       String   @default("offline")
-  bio          String?
-  socialLinks  String?
-  birthDate    String?
-  avatar       String?  @default("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200")
-  lastSeen     DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  posts        Post[]
-  likes        Like[]
+  id              String       @id @default(uuid())
+  username        String       @unique
+  email           String       @unique
+  password        String
+  firstName       String?
+  lastName        String?
+  bio             String?
+  avatar          String?
+  role            String       @default("user")
+  status          String       @default("offline")
+  lastSeen        DateTime     @default(now())
+  socialLinks     String?
+  birthDate       String?
+  
+  // Privacy Settings
+  privacyProfile  PrivacyLevel @default(EVERYONE)
+  privacyMessages PrivacyLevel @default(EVERYONE)
+  privacyPosts    PrivacyLevel @default(EVERYONE)
+
+  posts           Post[]
+  likes           Like[]
+  comments        Comment[]
+  followers       Follow[]     @relation("following")
+  following       Follow[]     @relation("follower")
+  createdAt       DateTime     @default(now())
 }
 
 model Post {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   content   String
-  imageUrl  String?
-  author    User     @relation(fields: [authorId], references: [id])
+  image     String?
+  author    User      @relation(fields: [authorId], references: [id])
   authorId  String
   likes     Like[]
-  createdAt DateTime @default(now())
+  comments  Comment[]
+  isPinned  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+}
+
+model Follow {
+  follower    User   @relation("follower", fields: [followerId], references: [id])
+  followerId  String
+  following   User   @relation("following", fields: [followingId], references: [id])
+  followingId String
+
+  @@id([followerId, followingId])
 }
 
 model Like {
-  id     String @id @default(uuid())
-  post   Post   @relation(fields: [postId], references: [id])
-  postId String
   user   User   @relation(fields: [userId], references: [id])
   userId String
+  post   Post   @relation(fields: [postId], references: [id])
+  postId String
 
-  @@unique([postId, userId])
+  @@id([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  post      Post     @relation(fields: [postId], references: [id])
+  postId    String
+  createdAt DateTime @default(now())
 }
 
 model ClusterNode {
-  id             String   @id @default(uuid())
-  nodeId         String   @unique
+  nodeId         String   @id
   url            String
   status         String
-  isMaster       Boolean  @default(false)
-  lastSeen       DateTime @default(now())
-  dbSyncProgress Float    @default(0)
-  updatedAt      DateTime @updatedAt
+  isMaster       Boolean
+  lastSeen       DateTime
+  dbSyncProgress Int
 }

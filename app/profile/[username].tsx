@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, Edit3, MessageSquare, UserPlus, UserMinus, Grid, Image as ImageIcon, Calendar, Link as LinkIcon, Settings } from 'lucide-react-native';
+import { ArrowLeft, Edit3, MessageSquare, UserPlus, Grid, Image as ImageIcon, Calendar, Link as LinkIcon, Settings, Lock } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchUserProfile, fetchCurrentUser, updateProfile, toggleFollow, fetchPosts } from '../api';
+import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts } from '../api';
 import { translations, Language } from '../i18n';
 
 export default function ProfileScreen() {
@@ -20,35 +20,30 @@ export default function ProfileScreen() {
   const isOwnProfile = currentUser?.username === username;
   const t = translations[lang];
 
-  useEffect(() => {
-    loadData();
-  }, [username]);
+  useEffect(() => { loadData(); }, [username]);
 
   const loadData = async () => {
     const savedLang = await AsyncStorage.getItem('lang') as Language;
     if (savedLang) setLang(savedLang);
 
     try {
-      const [profileData, currentData, postsData] = await Promise.all([
-        fetchUserProfile(username as string),
-        fetchCurrentUser(),
-        fetchPosts(username as string)
-      ]);
+      const profileData = await fetchUserProfile(username as string);
+      const currentData = await fetchCurrentUser();
       setUser(profileData);
       setCurrentUser(currentData);
-      setPosts(postsData || []);
-      if (profileData) setEditForm({
-        firstName: profileData.firstName || '',
-        lastName: profileData.lastName || '',
-        bio: profileData.bio || '',
-        socialLinks: profileData.socialLinks || '',
-        birthDate: profileData.birthDate || ''
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+      
+      if (profileData && !profileData.isRestricted) {
+        const postsData = await fetchPosts(username as string);
+        setPosts(postsData || []);
+        setEditForm({
+          firstName: profileData.firstName || '',
+          lastName: profileData.lastName || '',
+          bio: profileData.bio || '',
+          socialLinks: profileData.socialLinks || '',
+          birthDate: profileData.birthDate || ''
+        });
+      }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const handleSave = async () => {
@@ -58,25 +53,16 @@ export default function ProfileScreen() {
     loadData();
   };
 
-  if (loading) return (
-    <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>
-  );
-
-  if (!user) return (
-    <View style={styles.center}><Text style={{color: '#fff'}}>User not found</Text></View>
-  );
+  if (loading) return <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>;
+  if (!user) return <View style={styles.center}><Text style={{color: '#fff'}}>User not found</Text></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-          <ArrowLeft color="#fff" size={24} />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><ArrowLeft color="#fff" size={24} /></TouchableOpacity>
         <Text style={styles.headerTitle}>@{user.username}</Text>
         {isOwnProfile ? (
-          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}>
-            <Settings color="#fff" size={24} />
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}><Settings color="#fff" size={24} /></TouchableOpacity>
         ) : <View style={{width: 40}} />}
       </View>
 
@@ -84,63 +70,55 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <Image source={{ uri: user.avatar || 'https://via.placeholder.com/150' }} style={styles.avatar} />
           
-          {editing ? (
-            <View style={styles.editForm}>
-              <TextInput style={styles.input} value={editForm.firstName} onChangeText={t => setEditForm({...editForm, firstName: t})} placeholder={t.firstName} placeholderTextColor="#8b949e" />
-              <TextInput style={styles.input} value={editForm.lastName} onChangeText={t => setEditForm({...editForm, lastName: t})} placeholder={t.lastName} placeholderTextColor="#8b949e" />
-              <TextInput style={styles.input} value={editForm.bio} onChangeText={t => setEditForm({...editForm, bio: t})} placeholder={t.bio} placeholderTextColor="#8b949e" multiline />
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={styles.btnText}>{t.save}</Text></TouchableOpacity>
+          {user.isRestricted ? (
+            <View style={styles.restrictedArea}>
+              <Lock color="#8b949e" size={48} />
+              <Text style={styles.restrictedText}>{t.restrictedProfile}</Text>
+              {!isOwnProfile && <TouchableOpacity style={styles.actionBtn}><UserPlus size={18} color="#fff" /><Text style={styles.btnText}>{t.follow}</Text></TouchableOpacity>}
             </View>
           ) : (
             <>
-              <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
-              <Text style={styles.bio}>{user.bio || 'No bio yet'}</Text>
-              
-              <View style={styles.stats}>
-                <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.followers || 0}</Text><Text style={styles.statLabel}>{t.followers}</Text></View>
-                <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.following || 0}</Text><Text style={styles.statLabel}>{t.following}</Text></View>
-              </View>
-
-              <View style={styles.actions}>
-                {isOwnProfile ? (
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}>
-                    <Edit3 size={18} color="#fff" />
-                    <Text style={styles.btnText}>{t.editProfile}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <>
-                    <TouchableOpacity style={styles.actionBtn}>
-                      <UserPlus size={18} color="#fff" />
-                      <Text style={styles.btnText}>{t.follow}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, styles.msgBtn]}>
-                      <MessageSquare size={18} color="#fff" />
-                      <Text style={styles.btnText}>{t.message}</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
+              {editing ? (
+                <View style={styles.editForm}>
+                  <TextInput style={styles.input} value={editForm.firstName} onChangeText={v => setEditForm({...editForm, firstName: v})} placeholder={t.firstName} placeholderTextColor="#8b949e" />
+                  <TextInput style={styles.input} value={editForm.lastName} onChangeText={v => setEditForm({...editForm, lastName: v})} placeholder={t.lastName} placeholderTextColor="#8b949e" />
+                  <TextInput style={[styles.input, { height: 80 }]} value={editForm.bio} onChangeText={v => setEditForm({...editForm, bio: v})} placeholder={t.bio} placeholderTextColor="#8b949e" multiline />
+                  <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={styles.btnText}>{t.save}</Text></TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
+                  <Text style={styles.bio}>{user.bio || 'No bio yet'}</Text>
+                  <View style={styles.stats}>
+                    <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.followers || 0}</Text><Text style={styles.statLabel}>{t.followers}</Text></View>
+                    <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.following || 0}</Text><Text style={styles.statLabel}>{t.following}</Text></View>
+                  </View>
+                  <View style={styles.actions}>
+                    {isOwnProfile ? (
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}><Edit3 size={18} color="#fff" /><Text style={styles.btnText}>{t.editProfile}</Text></TouchableOpacity>
+                    ) : (
+                      <>
+                        <TouchableOpacity style={styles.actionBtn}><UserPlus size={18} color="#fff" /><Text style={styles.btnText}>{t.follow}</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, styles.msgBtn]}><MessageSquare size={18} color="#fff" /><Text style={styles.btnText}>{t.message}</Text></TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </>
+              )}
             </>
           )}
         </View>
 
-        <View style={styles.infoSection}>
-          {user.birthDate && <View style={styles.infoRow}><Calendar size={16} color="#8b949e" /><Text style={styles.infoText}>{user.birthDate}</Text></View>}
-          {user.socialLinks && <View style={styles.infoRow}><LinkIcon size={16} color="#8b949e" /><Text style={styles.infoText}>{user.socialLinks}</Text></View>}
-        </View>
-
-        <View style={styles.tabs}>
-          <TouchableOpacity style={styles.tabActive}><Text style={styles.tabText}>{t.posts}</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.tab}><Text style={styles.tabText}>{t.media}</Text></TouchableOpacity>
-        </View>
-
-        <View style={styles.feed}>
-          {posts.map(post => (
-            <View key={post.id} style={styles.postCard}>
-              <Text style={styles.postContent}>{post.content}</Text>
+        {!user.isRestricted && (
+          <>
+            <View style={styles.infoSection}>
+              {user.birthDate && <View style={styles.infoRow}><Calendar size={16} color="#8b949e" /><Text style={styles.infoText}>{user.birthDate}</Text></View>}
+              {user.socialLinks && <View style={styles.infoRow}><LinkIcon size={16} color="#8b949e" /><Text style={styles.infoText}>{user.socialLinks}</Text></View>}
             </View>
-          ))}
-        </View>
+            <View style={styles.tabs}><TouchableOpacity style={styles.tabActive}><Text style={styles.tabText}>{t.posts}</Text></TouchableOpacity><TouchableOpacity style={styles.tab}><Text style={styles.tabText}>{t.media}</Text></TouchableOpacity></View>
+            <View style={styles.feed}>{posts.map(post => (<View key={post.id} style={styles.postCard}><Text style={styles.postContent}>{post.content}</Text></View>))}</View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -164,6 +142,8 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, backgroundColor: '#5353ff', flexDirection: 'row', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
   msgBtn: { backgroundColor: '#21262d', borderWidth: 1, borderColor: '#30363d' },
   btnText: { color: '#fff', fontWeight: '600' },
+  restrictedArea: { alignItems: 'center', gap: 16, marginTop: 20 },
+  restrictedText: { color: '#8b949e', fontSize: 16, fontWeight: '500', textAlign: 'center' },
   infoSection: { paddingHorizontal: 24, gap: 10, marginBottom: 20 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoText: { color: '#8b949e', fontSize: 13 },

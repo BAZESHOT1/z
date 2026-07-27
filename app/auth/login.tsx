@@ -1,3 +1,4 @@
+Z">
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, useWindowDimensions, ScrollView } from 'react-native';
 import { ArrowLeft, Terminal, User, Lock, AlertCircle } from 'lucide-react-native';
@@ -40,17 +41,14 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <View style={styles.logoArea}>
-            <View style={styles.logoBox}>
-              <Terminal size={32} color="#fff" />
-            </View>
-            <Text style={styles.welcomeTitle}>Вход в Z Platform</Text>
+            <View style={styles.logoBox}><Terminal size={32} color="#fff" /></View>
+            <Text style={styles.welcomeTitle}>Вход в Z</Text>
             <Text style={styles.welcomeSub}>Введите свои данные для доступа к сети</Text>
           </View>
 
           {error && (
             <Animated.View entering={FadeInDown} style={styles.errorBox}>
-              <AlertCircle size={16} color="#f85149" />
-              <Text style={styles.errorText}>{error}</Text>
+              <AlertCircle size={16} color="#f85149" /><Text style={styles.errorText}>{error}</Text>
             </Animated.View>
           )}
 
@@ -59,14 +57,7 @@ export default function LoginScreen() {
               <Text style={styles.inputLabel}>Логин (Username)</Text>
               <View style={styles.field}>
                 <User size={18} color="#8b949e" style={styles.fieldIcon} />
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Напр. ivan_dev" 
-                  placeholderTextColor="#484f58"
-                  value={form.username}
-                  onChangeText={v => setForm({...form, username: v})}
-                  autoCapitalize="none"
-                />
+                <TextInput style={styles.input} placeholder="Напр. ivan_dev" placeholderTextColor="#484f58" value={form.username} onChangeText={v => setForm({...form, username: v})} autoCapitalize="none" />
               </View>
             </View>
 
@@ -74,14 +65,7 @@ export default function LoginScreen() {
               <Text style={styles.inputLabel}>Пароль</Text>
               <View style={styles.field}>
                 <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
-                <TextInput 
-                  style={styles.input} 
-                  placeholder="Ваш секретный пароль" 
-                  placeholderTextColor="#484f58"
-                  secureTextEntry
-                  value={form.password}
-                  onChangeText={v => setForm({...form, password: v})}
-                />
+                <TextInput style={styles.input} placeholder="Ваш секретный пароль" placeholderTextColor="#484f58" secureTextEntry value={form.password} onChangeText={v => setForm({...form, password: v})} />
               </View>
             </View>
 
@@ -89,11 +73,7 @@ export default function LoginScreen() {
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainBtnText}>Войти</Text>}
             </TouchableOpacity>
 
-            <View style={styles.divider}>
-              <View style={styles.line} />
-              <Text style={styles.dividerText}>ИЛИ</Text>
-              <View style={styles.line} />
-            </View>
+            <View style={styles.divider}><View style={styles.line} /><Text style={styles.dividerText}>ИЛИ</Text><View style={styles.line} /></View>
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/auth/register')}>
               <Text style={styles.secondaryBtnText}>Создать новый аккаунт</Text>
@@ -109,7 +89,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
   bgGlow: { position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: 'rgba(35, 134, 54, 0.05)' } as any,
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 420, backgroundColor: '#161b22', borderRadius: 12, padding: 32, borderWidth: 1, borderColor: '#30363d', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 30 },
+  card: { width: '100%', maxWidth: 420, backgroundColor: '#161b22', borderRadius: 12, padding: 32, borderWidth: 1, borderColor: '#30363d' },
   desktopCard: { padding: 40 },
   backBtn: { alignSelf: 'flex-start', marginBottom: 20, padding: 8 },
   logoArea: { alignItems: 'center', marginBottom: 32 },

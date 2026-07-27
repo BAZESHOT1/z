@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PrivacyLevel } from '@prisma/client';
 import { config } from './config';
 import { clusterService } from './services/clusterService';
 import { hashPassword, verifyPassword, encryptField, decryptField } from './utils/crypto';
@@ -12,12 +12,10 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Helper for JWT
 function generateToken(userId: string) {
   return jwt.sign({ userId }, config.jwtSecret, { expiresIn: '30d' });
 }
 
-// Get user from token
 async function getUserFromReq(req: Request) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -30,170 +28,128 @@ async function getUserFromReq(req: Request) {
   }
 }
 
-// Auth Middleware for admin access
-const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
-  const user = await getUserFromReq(req);
-  if (user && (user.role === 'admin' || user.role === 'root')) {
-    return next();
+// Helper: Check if two users are friends (mutual follows)
+async function areFriends(userId1: string, userId2: string) {
+  const follow1 = await prisma.follow.findUnique({
+    where: { followerId_followingId: { followerId: userId1, followingId: userId2 } }
+  });
+  const follow2 = await prisma.follow.findUnique({
+    where: { followerId_followingId: { followerId: userId2, followingId: userId1 } }
+  });
+  return !!follow1 && !!follow2;
+}
+
+async function canAccess(viewerId: string | undefined, owner: any, privacyField: PrivacyLevel) {
+  if (viewerId === owner.id) return true;
+  if (privacyField === 'EVERYONE') return true;
+  if (privacyField === 'NOBODY') return false;
+  if (privacyField === 'FRIENDS') {
+    if (!viewerId) return false;
+    return await areFriends(viewerId, owner.id);
   }
-  res.status(403).json({ error: 'Доступ ограничен: только для администраторов' });
-};
+  return false;
+}
 
-// Check username availability
-app.get('/api/auth/check-username', async (req: Request, res: Response): Promise<any> => {
-  const { username } = req.query;
-  if (!username || typeof username !== 'string') return res.json({ available: false });
-  const existing = await prisma.user.findUnique({ where: { username } });
-  res.json({ available: !existing });
-});
-
-// POST /api/auth/register
 app.post('/api/auth/register', async (req: Request, res: Response): Promise<any> => {
   try {
-    const { username, password, email } = req.body || {};
-    if (!username || !password || !email) {
-      return res.status(400).json({ error: 'Пожалуйста, заполните все обязательные поля' });
-    }
-
-    const existingUser = await prisma.user.findUnique({ where: { username } });
-    if (existingUser) return res.status(400).json({ error: 'Этот логин уже занят' });
-
+    const { username, password, email } = req.body;
     const user = await prisma.user.create({
       data: {
         username,
-        email: encryptField(email), // Шифруем email
+        email: encryptField(email),
         password: hashPassword(password),
-        role: 'user',
-        status: 'online',
-        lastSeen: new Date(),
       },
     });
-
-    const token = generateToken(user.id);
-    return res.status(201).json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName || user.username, // Fallback to username
-        role: user.role,
-        avatar: user.avatar,
-      },
-    });
+    res.status(201).json({ token: generateToken(user.id), user });
   } catch (err) {
-    return res.status(500).json({ error: 'Системная ошибка при регистрации' });
+    res.status(400).json({ error: 'Username or email already exists' });
   }
 });
 
-// POST /api/auth/login
 app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { username, password } = req.body || {};
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user || !verifyPassword(password, user.password)) {
-      return res.status(401).json({ error: 'Логин или пароль введены неверно' });
-    }
-
-    const token = generateToken(user.id);
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName || user.username,
-        lastName: user.lastName,
-        role: user.role,
-        bio: decryptField(user.bio),
-        avatar: user.avatar,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Ошибка входа' });
+  const { username, password } = req.body;
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user || !verifyPassword(password, user.password)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
+  res.json({ token: generateToken(user.id), user });
 });
 
-// GET /api/auth/me
-app.get('/api/auth/me', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/auth/me', async (req: Request, res: Response) => {
   const user = await getUserFromReq(req);
-  if (!user) return res.status(401).json({ error: 'Авторизация истекла' });
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
   res.json({
-    id: user.id,
-    username: user.username,
-    firstName: user.firstName || user.username,
-    lastName: user.lastName,
-    role: user.role,
+    ...user,
     bio: decryptField(user.bio),
-    avatar: user.avatar,
+    privacyProfile: user.privacyProfile,
+    privacyMessages: user.privacyMessages,
+    privacyPosts: user.privacyPosts
   });
 });
 
-// PUT /api/auth/profile - Обновление профиля
-app.put('/api/auth/profile', async (req: Request, res: Response): Promise<any> => {
+app.put('/api/auth/profile', async (req: Request, res: Response) => {
   const user = await getUserFromReq(req);
-  if (!user) return res.status(401).json({ error: 'Ошибка доступа' });
-
-  const { firstName, lastName, bio, socialLinks, birthDate, avatar } = req.body;
-  
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const { firstName, lastName, bio, privacyProfile, privacyMessages, privacyPosts } = req.body;
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
-      firstName: firstName || null,
-      lastName: firstName ? (lastName || null) : null, // Фамилия только если есть имя
+      firstName, lastName, 
       bio: encryptField(bio),
-      socialLinks: encryptField(socialLinks),
-      birthDate: encryptField(birthDate),
-      avatar: avatar || user.avatar,
-    },
+      privacyProfile, privacyMessages, privacyPosts
+    }
+  });
+  res.json(updated);
+});
+
+app.get('/api/users/:username', async (req: Request, res: Response): Promise<any> => {
+  const viewer = await getUserFromReq(req);
+  const { username } = req.params;
+  const owner = await prisma.user.findUnique({
+    where: { username },
+    include: { _count: { select: { followers: true, following: true } } }
   });
 
-  res.json({ success: true, user: { ...updated, bio: decryptField(updated.bio) } });
+  if (!owner) return res.status(404).json({ error: 'User not found' });
+
+  const hasAccess = await canAccess(viewer?.id, owner, owner.privacyProfile);
+  
+  if (!hasAccess) {
+    return res.json({
+      username: owner.username,
+      avatar: owner.avatar,
+      isRestricted: true,
+      _count: owner._count
+    });
+  }
+
+  res.json({
+    ...owner,
+    bio: decryptField(owner.bio),
+    email: undefined, password: undefined // Never return sensitive
+  });
 });
 
-// PUT /api/auth/role
-app.put('/api/auth/role', async (req: Request, res: Response): Promise<any> => {
-  const user = await getUserFromReq(req);
-  if (!user) return res.status(401).json({ error: 'Доступ запрещен' });
-  const { role } = req.body;
-  await prisma.user.update({ where: { id: user.id }, data: { role } });
-  res.json({ success: true, role });
-});
-
-// ====== ПОСТЫ =====
 app.get('/api/posts', async (req: Request, res: Response) => {
+  const viewer = await getUserFromReq(req);
+  const { username } = req.query;
+
+  let whereClause: any = {};
+  if (username) {
+    const owner = await prisma.user.findUnique({ where: { username: username as string } });
+    if (!owner) return res.json([]);
+    const hasAccess = await canAccess(viewer?.id, owner, owner.privacyPosts);
+    if (!hasAccess) return res.json([]);
+    whereClause.authorId = owner.id;
+  }
+
   const posts = await prisma.post.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { author: true, likes: true },
+    where: whereClause,
+    orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+    include: { author: true, _count: { select: { likes: true } } }
   });
-  const formatted = posts.map(p => ({
-    id: p.id,
-    content: p.content,
-    createdAt: p.createdAt,
-    author: {
-      name: p.author.firstName || p.author.username,
-      username: p.author.username,
-      avatar: p.author.avatar,
-      role: p.author.role,
-    },
-    likes: p.likes.length,
-  }));
-  res.json(formatted);
-});
 
-app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
-  const user = await getUserFromReq(req);
-  if (!user) return res.status(401).json({ error: 'Войдите в сеть для публикации' });
-  const { content } = req.body;
-  const post = await prisma.post.create({
-    data: { content, authorId: user.id },
-    include: { author: true },
-  });
-  res.status(201).json({ ...post, author: { name: post.author.firstName || post.author.username, username: post.author.username, avatar: post.author.avatar } });
-});
-
-// ====== CLUSTER (Admin Only) =====
-app.get('/api/cluster/nodes', isAdmin, async (req: Request, res: Response) => {
-  const status = await clusterService.getClusterStatus();
-  res.json(status);
+  res.json(posts);
 });
 
 app.listen(config.port, '0.0.0.0', () => console.log(`Z API running on port ${config.port}`));

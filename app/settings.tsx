@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch } from 'react-native';
-import { ArrowLeft, Globe, Lock, LogOut, Moon } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { ArrowLeft, Globe, Lock, LogOut, Moon, Shield } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { translations, Language } from './i18n';
-import { setAuthToken } from './api';
+import { setAuthToken, fetchCurrentUser, updateProfile } from './api';
 
 export default function SettingsScreen() {
   const [lang, setLang] = useState<Language>('ru');
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const t = translations[lang];
 
   useEffect(() => {
@@ -18,6 +19,9 @@ export default function SettingsScreen() {
   const loadSettings = async () => {
     const savedLang = await AsyncStorage.getItem('lang') as Language;
     if (savedLang) setLang(savedLang);
+    const data = await fetchCurrentUser();
+    setUser(data);
+    setLoading(false);
   };
 
   const toggleLanguage = async () => {
@@ -26,18 +30,35 @@ export default function SettingsScreen() {
     await AsyncStorage.setItem('lang', newLang);
   };
 
+  const cyclePrivacy = async (field: string) => {
+    const levels = ['EVERYONE', 'FRIENDS', 'NOBODY'];
+    const currentIdx = levels.indexOf(user[field]);
+    const nextLevel = levels[(currentIdx + 1) % levels.length];
+    
+    const updated = { ...user, [field]: nextLevel };
+    setUser(updated);
+    await updateProfile(updated);
+  };
+
   const handleLogout = async () => {
     await AsyncStorage.removeItem('auth_token');
     setAuthToken(null);
     router.replace('/auth/login');
   };
 
+  if (loading) return <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>;
+
+  const PrivacyRow = ({ label, field }: { label: string, field: string }) => (
+    <TouchableOpacity style={styles.row} onPress={() => cyclePrivacy(field)}>
+      <Text style={styles.rowText}>{label}</Text>
+      <Text style={styles.valText}>{t[`privacy${user[field].charAt(0) + user[field].slice(1).toLowerCase()}` as keyof typeof t] || user[field]}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#fff" size={24} />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><ArrowLeft color="#fff" size={24} /></TouchableOpacity>
         <Text style={styles.title}>{t.settings}</Text>
       </View>
 
@@ -45,39 +66,23 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>{t.systemSettings}</Text>
         <View style={styles.card}>
           <TouchableOpacity style={styles.row} onPress={toggleLanguage}>
-            <View style={styles.rowLeft}>
-              <Globe color="#8b949e" size={20} />
-              <Text style={styles.rowText}>{t.language}</Text>
-            </View>
+            <View style={styles.rowLeft}><Globe color="#8b949e" size={20} /><Text style={styles.rowText}>{t.language}</Text></View>
             <Text style={styles.valText}>{lang === 'ru' ? 'Русский' : 'English'}</Text>
           </TouchableOpacity>
-          <View style={styles.divider} />
-          <View style={styles.row}>
-            <View style={styles.rowLeft}>
-              <Moon color="#8b949e" size={20} />
-              <Text style={styles.rowText}>Dark Mode</Text>
-            </View>
-            <Switch value={true} trackColor={{ true: '#5353ff' }} />
-          </View>
         </View>
 
         <Text style={styles.sectionTitle}>{t.privacySettings}</Text>
         <View style={styles.card}>
-          <View style={styles.row}>
-            <View style={styles.rowLeft}>
-              <Lock color="#8b949e" size={20} />
-              <Text style={styles.rowText}>{isPrivate ? t.privacyPrivate : t.privacyPublic}</Text>
-            </View>
-            <Switch value={isPrivate} onValueChange={setIsPrivate} trackColor={{ true: '#5353ff' }} />
-          </View>
+          <PrivacyRow label={t.privacyProfile} field="privacyProfile" />
+          <View style={styles.divider} />
+          <PrivacyRow label={t.privacyMessages} field="privacyMessages" />
+          <View style={styles.divider} />
+          <PrivacyRow label={t.privacyPosts} field="privacyPosts" />
         </View>
 
         <TouchableOpacity style={[styles.card, styles.logoutCard]} onPress={handleLogout}>
           <View style={styles.row}>
-            <View style={styles.rowLeft}>
-              <LogOut color="#f85149" size={20} />
-              <Text style={[styles.rowText, { color: '#f85149' }]}>{t.signOut}</Text>
-            </View>
+            <View style={styles.rowLeft}><LogOut color="#f85149" size={20} /><Text style={[styles.rowText, { color: '#f85149' }]}>{t.signOut}</Text></View>
           </View>
         </TouchableOpacity>
       </ScrollView>
@@ -87,6 +92,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0d1117' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
   backBtn: { padding: 4 },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
