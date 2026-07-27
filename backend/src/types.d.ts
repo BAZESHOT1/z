@@ -1,2 +1,1 @@
-declare module 'express';
-declare module 'cors';
+// Файл больше не требуется, так как используются официальные типы @types/express и @types/cors
