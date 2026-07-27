@@ -5,7 +5,6 @@ export const config = {
   port: parseInt(process.env.PORT || '3000'),
   nodeEnv: process.env.NODE_ENV || 'production',
   
-  // Автоматически строит URL из переменных
   databaseUrl: process.env.DATABASE_URL || 
     `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || 'postgres'}@${process.env.POSTGRES_HOST || 'postgres'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'socialnet'}`,
   
@@ -18,4 +17,10 @@ export const config = {
   aiApiKeys: process.env.AI_API_KEYS?.split(',') || [],
   deploymentMode: process.env.DEPLOYMENT_MODE || 'local',
   autoMigrate: process.env.AUTO_MIGRATE === 'true',
+
+  // Параметры Mesh-сети нод
+  isMasterNode: process.env.IS_MASTER_NODE === 'true',
+  nodeId: process.env.NODE_ID || 'node-default',
+  clusterSecret: process.env.CLUSTER_SECRET || 'mesh_secret',
+  masterNodeUrl: process.env.MASTER_NODE_URL || '',
 };
