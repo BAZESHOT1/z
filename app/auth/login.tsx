@@ -1,4 +1,3 @@
-Z">
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, useWindowDimensions, ScrollView } from 'react-native';
 import { ArrowLeft, Terminal, User, Lock, AlertCircle } from 'lucide-react-native';
