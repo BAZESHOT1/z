@@ -613,4 +613,5 @@ const styles = StyleSheet.create({
   singleInput: { borderWidth: 1, borderRadius: 6, padding: 12, fontSize: 14, marginBottom: 12 },
   publishBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
   publishBtnText: { color: '#ffffff', fontWeight: '600', fontSize: 14 },
+  emptyTitle: { fontSize: 16, fontWeight: '700' },
 });
