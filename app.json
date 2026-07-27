@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "dyad-react-native-expo-template",
-    "slug": "dyad-react-native-expo-template",
+    "name": "Z",
+    "slug": "z-app",
     "plugins": ["expo-router"],
     "experiments": { "typedRoutes": false }
   }

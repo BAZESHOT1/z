@@ -54,10 +54,10 @@ async function initDefaultUser() {
           username: 'master_admin',
           password: hashPassword('admin123'),
           firstName: 'Администратор',
-          lastName: 'Ноды',
+          lastName: 'Z',
           role: 'root',
           status: 'online',
-          bio: encryptField('Главный администратор центральной ноды Mesh-сети'),
+          bio: encryptField('Главный администратор центрального узла сети Z'),
           avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
         },
       });
@@ -72,7 +72,7 @@ async function initDefaultUser() {
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    app: 'SocialNet API',
+    app: 'Z API',
     nodeId: config.nodeId,
     isMaster: config.isMasterNode,
     timestamp: new Date().toISOString(),
@@ -99,7 +99,6 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
       return res.status(400).json({ error: 'Пользователь с таким логином уже существует' });
     }
 
-    // Шифруем чувствительные данные перед сохранением в PostgreSQL
     const encryptedBio = bio ? encryptField(bio.slice(0, 256)) : null;
     const encryptedLinks = socialLinks ? encryptField(typeof socialLinks === 'string' ? socialLinks : JSON.stringify(socialLinks)) : null;
     const encryptedBirthDate = birthDate ? encryptField(birthDate) : null;
@@ -110,7 +109,7 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
         password: hashPassword(password),
         firstName,
         lastName: lastName || null,
-        role: 'user', // Роль по умолчанию
+        role: 'user',
         status: 'online',
         bio: encryptedBio,
         socialLinks: encryptedLinks,
@@ -157,7 +156,6 @@ app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> =>
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
-    // Обновляем статус на online и время входа
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: { status: 'online', lastSeen: new Date() },
@@ -186,7 +184,7 @@ app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> =>
   }
 });
 
-// GET /api/auth/me — Получить профиль текущего авторизованного пользователя
+// GET /api/auth/me
 app.get('/api/auth/me', async (req: Request, res: Response): Promise<any> => {
   const user = await getUserFromReq(req);
   if (!user) return res.status(401).json({ error: 'Не авторизован' });
@@ -206,7 +204,7 @@ app.get('/api/auth/me', async (req: Request, res: Response): Promise<any> => {
   });
 });
 
-// PUT /api/auth/role — Ручка для смены роли (для тестов)
+// PUT /api/auth/role — Ручка для смены роли
 app.put('/api/auth/role', async (req: Request, res: Response): Promise<any> => {
   const user = await getUserFromReq(req);
   if (!user) return res.status(401).json({ error: 'Не авторизован' });
@@ -230,7 +228,6 @@ app.put('/api/auth/role', async (req: Request, res: Response): Promise<any> => {
 
 // ====== ПОСТЫ =====
 
-// GET /api/posts
 app.get('/api/posts', async (req: Request, res: Response) => {
   try {
     const posts = await prisma.post.findMany({
@@ -265,7 +262,6 @@ app.get('/api/posts', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/posts — Создание поста
 app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
   try {
     const user = await getUserFromReq(req);
@@ -308,7 +304,6 @@ app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-// POST /api/posts/:id/like
 app.post('/api/posts/:id/like', async (req: Request, res: Response): Promise<any> => {
   try {
     const user = await getUserFromReq(req);
@@ -346,7 +341,7 @@ app.get('/api/cluster/nodes', async (req: Request, res: Response) => {
 
 app.listen(config.port, '0.0.0.0', async () => {
   await initDefaultUser();
-  console.log(`[SocialNet Backend] Сервер готов к запросам на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
+  console.log(`[Z Backend] Сервер готов к запросам на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
 });
 
 export default app;

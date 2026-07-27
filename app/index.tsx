@@ -20,7 +20,6 @@ import {
   fetchClusterNodes,
   registerUser,
   loginUser,
-  fetchCurrentUser,
   updateUserRole,
   setAuthToken,
   API_URL,
@@ -56,20 +55,40 @@ interface Post {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  root: '#ef4444',
-  admin: '#f59e0b',
-  moderator: '#10b981',
-  tester: '#8b5cf6',
-  helper: '#06b6d4',
+  root: '#d66853',
+  admin: '#e07a5f',
+  moderator: '#3d405b',
+  tester: '#81b29a',
+  helper: '#f2cc8f',
 };
 
 export default function SocialApp() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeTab, setActiveTab] = useState<'feed' | 'cluster' | 'profile'>('feed');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [nodes, setNodes] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Палитра согласно спецификации
+  const colors = theme === 'dark'
+    ? {
+        bg1: '#11151c',
+        bg2: '#212d40',
+        border: '#364156',
+        subtext: '#7e8899',
+        text: '#fefcfb',
+        accent: '#d66853',
+      }
+    : {
+        bg1: '#fefcfb',
+        bg2: '#ededf4',
+        border: '#7e8899',
+        subtext: '#555d69',
+        text: '#11151c',
+        accent: '#d66853',
+      };
 
   // Окно создания поста
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
@@ -92,7 +111,6 @@ export default function SocialApp() {
   const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
-    // Дефолтный автологин под администратора master_admin
     handleQuickLogin('master_admin', 'admin123');
   }, []);
 
@@ -114,7 +132,7 @@ export default function SocialApp() {
       const data = await fetchPosts();
       setPosts(data);
     } catch (err: any) {
-      setErrorMsg('Не удалось подключиться к БД на VPS (' + API_URL + ')');
+      setErrorMsg('Не удалось подключиться к серверу Z (' + API_URL + ')');
     } finally {
       setLoading(false);
     }
@@ -187,7 +205,7 @@ export default function SocialApp() {
       setNewImageUrl('');
       setIsPostModalOpen(false);
     } catch (e: any) {
-      Alert.alert('Ошибка', e.message || 'Не удалось отправить пост в базу данных');
+      Alert.alert('Ошибка', e.message || 'Не удалось отправить запись');
     } finally {
       setIsPublishing(false);
     }
@@ -213,26 +231,48 @@ export default function SocialApp() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg1 }]}>
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.bg1} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.logoText}>SocialNet Mesh</Text>
+      <View style={[styles.header, { backgroundColor: colors.bg2, borderBottomColor: colors.border }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={[styles.logoBadge, { backgroundColor: colors.accent }]}>
+            <Text style={styles.logoText}>Z</Text>
+          </View>
+          <Text style={[styles.brandTitle, { color: colors.text }]}>Z</Text>
+        </View>
         
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Кнопка смены темы */}
+          <TouchableOpacity
+            style={[styles.iconThemeBtn, { backgroundColor: colors.bg1, borderColor: colors.border }]}
+            onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            <Text style={{ fontSize: 14 }}>{theme === 'dark' ? '☀️' : '🌙'}</Text>
+          </TouchableOpacity>
+
           {currentUser ? (
-            <TouchableOpacity style={styles.userBadgeBtn} onPress={() => setActiveTab('profile')}>
+            <TouchableOpacity
+              style={[styles.userBadgeBtn, { backgroundColor: colors.bg1, borderColor: colors.border }]}
+              onPress={() => setActiveTab('profile')}
+            >
               <Image source={{ uri: currentUser.avatar }} style={styles.miniAvatar} />
-              <Text style={styles.miniUsername}>@{currentUser.username}</Text>
+              <Text style={[styles.miniUsername, { color: colors.text }]}>@{currentUser.username}</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.authBtn} onPress={() => setIsAuthModalOpen(true)}>
-              <Text style={styles.authBtnText}>Войти</Text>
+            <TouchableOpacity
+              style={[styles.authBtn, { borderColor: colors.accent }]}
+              onPress={() => setIsAuthModalOpen(true)}
+            >
+              <Text style={[styles.authBtnText, { color: colors.accent }]}>Войти</Text>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.createPostBtn} onPress={() => setIsPostModalOpen(true)}>
+          <TouchableOpacity
+            style={[styles.createPostBtn, { backgroundColor: colors.accent }]}
+            onPress={() => setIsPostModalOpen(true)}
+          >
             <Text style={styles.createPostBtnText}>+ Пост</Text>
           </TouchableOpacity>
         </View>
@@ -243,55 +283,57 @@ export default function SocialApp() {
         <View style={{ flex: 1 }}>
           {loading ? (
             <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color="#6366f1" />
-              <Text style={styles.loadingText}>Загрузка из PostgreSQL...</Text>
+              <ActivityIndicator size="large" color={colors.accent} />
+              <Text style={[styles.loadingText, { color: colors.subtext }]}>Загрузка записей из Z...</Text>
             </View>
           ) : errorMsg ? (
             <View style={styles.centerContainer}>
-              <Text style={styles.errorText}>{errorMsg}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={loadFeed}>
+              <Text style={[styles.errorText, { color: colors.accent }]}>{errorMsg}</Text>
+              <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.accent }]} onPress={loadFeed}>
                 <Text style={styles.retryBtnText}>Повторить попытку</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <ScrollView style={styles.feedScroll} showsVerticalScrollIndicator={false}>
               {posts.map((post) => (
-                <View key={post.id} style={styles.postCard}>
+                <View
+                  key={post.id}
+                  style={[styles.postCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}
+                >
                   <View style={styles.postHeader}>
                     <View style={{ position: 'relative' }}>
                       <Image
                         source={{ uri: post.author.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}
                         style={styles.authorAvatar}
                       />
-                      <View style={[styles.statusDot, { backgroundColor: post.author.status === 'online' ? '#10b981' : '#9ca3af' }]} />
+                      <View style={[styles.statusDot, { backgroundColor: post.author.status === 'online' ? '#10b981' : colors.subtext, borderColor: colors.bg2 }]} />
                     </View>
 
                     <View style={styles.postHeaderInfo}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.authorName}>{post.author.name}</Text>
+                        <Text style={[styles.authorName, { color: colors.text }]}>{post.author.name}</Text>
                         
-                        {/* Не отображаем стандартную роль user */}
                         {post.author.role && post.author.role !== 'user' && (
-                          <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[post.author.role] || '#6366f1' }]}>
+                          <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[post.author.role] || colors.accent }]}>
                             <Text style={styles.roleBadgeText}>{post.author.role.toUpperCase()}</Text>
                           </View>
                         )}
                       </View>
                       
-                      <Text style={styles.postTime}>@{post.author.username} • {new Date(post.createdAt).toLocaleTimeString()}</Text>
+                      <Text style={[styles.postTime, { color: colors.subtext }]}>@{post.author.username} • {new Date(post.createdAt).toLocaleTimeString()}</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.postText}>{post.content}</Text>
+                  <Text style={[styles.postText, { color: colors.text }]}>{post.content}</Text>
 
                   {post.image && (
                     <Image source={{ uri: post.image }} style={styles.postImage} resizeMode="cover" />
                   )}
 
-                  <View style={styles.postActions}>
+                  <View style={[styles.postActions, { borderTopColor: colors.border }]}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(post.id)}>
                       <Text style={styles.actionIcon}>{post.isLiked ? '❤️' : '🤍'}</Text>
-                      <Text style={[styles.actionText, post.isLiked && styles.likedText]}>
+                      <Text style={[styles.actionText, { color: post.isLiked ? colors.accent : colors.subtext }]}>
                         {post.likes}
                       </Text>
                     </TouchableOpacity>
@@ -303,40 +345,40 @@ export default function SocialApp() {
         </View>
       )}
 
-      {/* СЕТЬ НОД (MESH CLUSTER) */}
+      {/* MESH CLUSTER (СЕТЬ НОД Z) */}
       {activeTab === 'cluster' && (
         <ScrollView style={styles.feedScroll} contentContainerStyle={{ padding: 16 }}>
-          <Text style={styles.centerTitle}>🌐 Мониторинг Mesh-Сети Нод</Text>
-          <Text style={styles.centerSub}>
-            Прямые данные о нодах из бэкенда и PostgreSQL.
+          <Text style={[styles.centerTitle, { color: colors.text }]}>🌐 Сеть нод Z</Text>
+          <Text style={[styles.centerSub, { color: colors.subtext }]}>
+            Мониторинг децентрализованных узлов сети и репликации БД.
           </Text>
 
-          <View style={styles.clusterCard}>
-            <Text style={styles.clusterCardTitle}>Центральный сервер (VPS)</Text>
-            <Text style={styles.clusterDetail}>IP: 82.26.152.225</Text>
-            <Text style={styles.clusterDetail}>Порт API Бэкенда: 4000</Text>
-            <Text style={styles.clusterDetail}>Порт PostgreSQL DB: 5435</Text>
-            <Text style={styles.clusterDetail}>Порт Redis: 6453</Text>
+          <View style={[styles.clusterCard, { backgroundColor: colors.bg2, borderColor: colors.accent }]}>
+            <Text style={[styles.clusterCardTitle, { color: colors.text }]}>Центральный узел VPS</Text>
+            <Text style={[styles.clusterDetail, { color: colors.subtext }]}>IP: 82.26.152.225</Text>
+            <Text style={[styles.clusterDetail, { color: colors.subtext }]}>API Бэкенда: Port 4000</Text>
+            <Text style={[styles.clusterDetail, { color: colors.subtext }]}>PostgreSQL: Port 5435</Text>
+            <Text style={[styles.clusterDetail, { color: colors.subtext }]}>Redis: Port 6453</Text>
           </View>
 
-          <Text style={{ fontSize: 16, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#111827' }}>
-            Активные узлы сети ({nodes.length}):
+          <Text style={{ fontSize: 15, fontWeight: '700', marginTop: 18, marginBottom: 10, color: colors.text }}>
+            Активные ноды сети ({nodes.length}):
           </Text>
 
           {nodes.length === 0 ? (
-            <Text style={{ color: '#6b7280', marginTop: 8 }}>Ноды не зарегистрированы.</Text>
+            <Text style={{ color: colors.subtext, marginTop: 8 }}>Ноды не зарегистрированы.</Text>
           ) : (
             nodes.map((node, index) => (
-              <View key={node.nodeId || index} style={styles.nodeItem}>
+              <View key={node.nodeId || index} style={[styles.nodeItem, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
                 <View style={styles.nodeHeader}>
-                  <Text style={styles.nodeIdText}>{node.nodeId}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: '#10b981' }]}>
-                    <Text style={styles.statusBadgeText}>{node.isMaster ? 'MASTER BACKEND' : 'REPLICA NODE'}</Text>
+                  <Text style={[styles.nodeIdText, { color: colors.text }]}>{node.nodeId}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: colors.accent }]}>
+                    <Text style={styles.statusBadgeText}>{node.isMaster ? 'MASTER' : 'REPLICA'}</Text>
                   </View>
                 </View>
-                <Text style={styles.nodeSub}>Репликация БД: {node.dbSyncProgress}%</Text>
-                <Text style={styles.nodeSub}>Статус: {node.status.toUpperCase()}</Text>
-                <Text style={styles.nodeSub}>URL: {node.url}</Text>
+                <Text style={[styles.nodeSub, { color: colors.subtext }]}>Синхронизация БД: {node.dbSyncProgress}%</Text>
+                <Text style={[styles.nodeSub, { color: colors.subtext }]}>Статус: {node.status.toUpperCase()}</Text>
+                <Text style={[styles.nodeSub, { color: colors.subtext }]}>URL: {node.url}</Text>
               </View>
             ))
           )}
@@ -349,50 +391,51 @@ export default function SocialApp() {
           {currentUser ? (
             <View style={{ alignItems: 'center' }}>
               <View style={{ position: 'relative', marginBottom: 12 }}>
-                <Image source={{ uri: currentUser.avatar }} style={{ width: 90, height: 90, borderRadius: 45 }} />
-                <View style={[styles.statusDotLarge, { backgroundColor: currentUser.status === 'online' ? '#10b981' : '#9ca3af' }]} />
+                <Image source={{ uri: currentUser.avatar }} style={{ width: 88, height: 88, borderRadius: 44, borderWidth: 2, borderColor: colors.border }} />
+                <View style={[styles.statusDotLarge, { backgroundColor: currentUser.status === 'online' ? '#10b981' : colors.subtext, borderColor: colors.bg1 }]} />
               </View>
 
-              <Text style={styles.profileName}>{currentUser.firstName} {currentUser.lastName || ''}</Text>
-              <Text style={styles.profileUsername}>@{currentUser.username}</Text>
+              <Text style={[styles.profileName, { color: colors.text }]}>{currentUser.firstName} {currentUser.lastName || ''}</Text>
+              <Text style={[styles.profileUsername, { color: colors.subtext }]}>@{currentUser.username}</Text>
 
-              {/* Отображение особой роли */}
               {currentUser.role && currentUser.role !== 'user' && (
-                <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[currentUser.role] || '#6366f1', marginTop: 6, paddingHorizontal: 12, paddingVertical: 4 }]}>
-                  <Text style={[styles.roleBadgeText, { fontSize: 12 }]}>{currentUser.role.toUpperCase()}</Text>
+                <View style={[styles.roleBadge, { backgroundColor: ROLE_COLORS[currentUser.role] || colors.accent, marginTop: 6, paddingHorizontal: 12, paddingVertical: 4 }]}>
+                  <Text style={[styles.roleBadgeText, { fontSize: 11 }]}>{currentUser.role.toUpperCase()}</Text>
                 </View>
               )}
 
-              {/* Зашифрованное описание (био) */}
-              <View style={styles.bioBox}>
-                <Text style={styles.bioTitle}>🔒 Описание (Зашифровано AES-256):</Text>
-                <Text style={styles.bioText}>{currentUser.bio || 'Описание отсутствует'}</Text>
+              {/* Био */}
+              <View style={[styles.bioBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+                <Text style={[styles.bioTitle, { color: colors.subtext }]}>🔒 Описание (Шифрование AES-256):</Text>
+                <Text style={[styles.bioText, { color: colors.text }]}>{currentUser.bio || 'Описание отсутствует'}</Text>
               </View>
 
-              {/* Ссылки и контакты */}
+              {/* Соцсети */}
               {currentUser.socialLinks && (
-                <View style={styles.bioBox}>
-                  <Text style={styles.bioTitle}>🌐 Ссылки на соцсети:</Text>
-                  <Text style={styles.bioText}>{currentUser.socialLinks}</Text>
+                <View style={[styles.bioBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+                  <Text style={[styles.bioTitle, { color: colors.subtext }]}>🌐 Ссылки на соцсети:</Text>
+                  <Text style={[styles.bioText, { color: colors.text }]}>{currentUser.socialLinks}</Text>
                 </View>
               )}
 
-              {/* Тестовый переключатель ролей */}
-              <View style={styles.roleTestCard}>
-                <Text style={styles.roleTestTitle}>⚙️ Тестовая смена роли:</Text>
-                <Text style={styles.roleTestSub}>Обычная роль "user" скрыта из значков.</Text>
+              {/* Смена роли */}
+              <View style={[styles.roleTestCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+                <Text style={[styles.roleTestTitle, { color: colors.text }]}>⚙️ Переключение роли:</Text>
+                <Text style={[styles.roleTestSub, { color: colors.subtext }]}>Стандартная роль "user" не выводится в бейдже.</Text>
                 <View style={styles.roleBtnGrid}>
                   {['user', 'root', 'admin', 'moderator', 'tester', 'helper'].map((r) => (
                     <TouchableOpacity
                       key={r}
                       style={[
                         styles.roleSelectBtn,
-                        currentUser.role === r && styles.roleSelectBtnActive,
-                        { borderColor: ROLE_COLORS[r] || '#6366f1' },
+                        {
+                          backgroundColor: currentUser.role === r ? colors.accent : colors.bg1,
+                          borderColor: currentUser.role === r ? colors.accent : colors.border,
+                        }
                       ]}
                       onPress={() => handleRoleChange(r)}
                     >
-                      <Text style={[styles.roleSelectText, currentUser.role === r && styles.roleSelectTextActive]}>
+                      <Text style={[styles.roleSelectText, { color: currentUser.role === r ? '#ffffff' : colors.text }]}>
                         {r}
                       </Text>
                     </TouchableOpacity>
@@ -401,21 +444,21 @@ export default function SocialApp() {
               </View>
 
               <TouchableOpacity
-                style={styles.logoutBtn}
+                style={[styles.logoutBtn, { borderColor: colors.accent }]}
                 onPress={() => {
                   setAuthToken(null);
                   setCurrentUser(null);
-                  Alert.alert('Выход', 'Вы вышли из учетной записи');
+                  Alert.alert('Выход', 'Вы вышли из учетной записи Z');
                 }}
               >
-                <Text style={styles.logoutBtnText}>Выйти из аккаунта</Text>
+                <Text style={[styles.logoutBtnText, { color: colors.accent }]}>Выйти из аккаунта</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.centerContainer}>
-              <Text style={styles.emptyTitle}>Вы не авторизованы</Text>
-              <Text style={styles.emptySub}>Войдите или зарегистрируйтесь для доступа к профилю</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={() => setIsAuthModalOpen(true)}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>Вы не авторизованы</Text>
+              <Text style={[styles.emptySub, { color: colors.subtext }]}>Войдите в систему Z для доступа к профилю</Text>
+              <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.accent }]} onPress={() => setIsAuthModalOpen(true)}>
                 <Text style={styles.retryBtnText}>Войти в аккаунт</Text>
               </TouchableOpacity>
             </View>
@@ -424,22 +467,24 @@ export default function SocialApp() {
       )}
 
       {/* МОДАЛЬНОЕ ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ */}
-      <Modal visible={isAuthModalOpen} animationType="slide" transparent>
+      <Modal visible={isAuthModalOpen} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalTitle}>{authMode === 'login' ? 'Вход в аккаунт' : 'Регистрация профиля'}</Text>
+          <ScrollView contentContainerStyle={[styles.modalContent, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{authMode === 'login' ? 'Вход в Z' : 'Регистрация в Z'}</Text>
 
             <TextInput
-              style={styles.singleInput}
+              style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
               placeholder="Логин (username)"
+              placeholderTextColor={colors.subtext}
               value={authForm.username}
               onChangeText={(t) => setAuthForm({ ...authForm, username: t })}
               autoCapitalize="none"
             />
 
             <TextInput
-              style={styles.singleInput}
+              style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
               placeholder="Пароль"
+              placeholderTextColor={colors.subtext}
               secureTextEntry
               value={authForm.password}
               onChangeText={(t) => setAuthForm({ ...authForm, password: t })}
@@ -448,22 +493,25 @@ export default function SocialApp() {
             {authMode === 'register' && (
               <>
                 <TextInput
-                  style={styles.singleInput}
+                  style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
                   placeholder="Имя"
+                  placeholderTextColor={colors.subtext}
                   value={authForm.firstName}
                   onChangeText={(t) => setAuthForm({ ...authForm, firstName: t })}
                 />
 
                 <TextInput
-                  style={styles.singleInput}
+                  style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
                   placeholder="Фамилия (необязательно)"
+                  placeholderTextColor={colors.subtext}
                   value={authForm.lastName}
                   onChangeText={(t) => setAuthForm({ ...authForm, lastName: t })}
                 />
 
                 <TextInput
-                  style={styles.textInput}
-                  placeholder="Описание профиля (до 256 символов, шифруется)"
+                  style={[styles.textInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
+                  placeholder="Описание профиля (зашифровано)"
+                  placeholderTextColor={colors.subtext}
                   maxLength={256}
                   multiline
                   value={authForm.bio}
@@ -471,26 +519,27 @@ export default function SocialApp() {
                 />
 
                 <TextInput
-                  style={styles.singleInput}
+                  style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
                   placeholder="Ссылки на соцсети"
+                  placeholderTextColor={colors.subtext}
                   value={authForm.socialLinks}
                   onChangeText={(t) => setAuthForm({ ...authForm, socialLinks: t })}
                 />
               </>
             )}
 
-            <TouchableOpacity style={{ marginBottom: 12 }} onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
-              <Text style={{ color: '#6366f1', textAlign: 'center' }}>
+            <TouchableOpacity style={{ marginBottom: 16 }} onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
+              <Text style={{ color: colors.accent, textAlign: 'center', fontSize: 13, fontWeight: '600' }}>
                 {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
               </Text>
             </TouchableOpacity>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsAuthModalOpen(false)}>
-                <Text style={styles.cancelBtnText}>Отмена</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.subtext }]}>Отмена</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.publishBtn} onPress={handleAuthSubmit} disabled={authLoading}>
+              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.accent }]} onPress={handleAuthSubmit} disabled={authLoading}>
                 {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishBtnText}>{authMode === 'login' ? 'Войти' : 'Создать'}</Text>}
               </TouchableOpacity>
             </View>
@@ -499,14 +548,15 @@ export default function SocialApp() {
       </Modal>
 
       {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ПОСТА */}
-      <Modal visible={isPostModalOpen} animationType="slide" transparent>
+      <Modal visible={isPostModalOpen} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Создать новую запись</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Новая запись в Z</Text>
 
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
               placeholder="Что у вас нового?"
+              placeholderTextColor={colors.subtext}
               multiline
               numberOfLines={4}
               value={newContent}
@@ -514,18 +564,19 @@ export default function SocialApp() {
             />
 
             <TextInput
-              style={styles.singleInput}
+              style={[styles.singleInput, { backgroundColor: colors.bg1, borderColor: colors.border, color: colors.text }]}
               placeholder="Ссылка на изображение (необязательно)"
+              placeholderTextColor={colors.subtext}
               value={newImageUrl}
               onChangeText={setNewImageUrl}
             />
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsPostModalOpen(false)} disabled={isPublishing}>
-                <Text style={styles.cancelBtnText}>Отмена</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.subtext }]}>Отмена</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.publishBtn} onPress={handleCreatePost} disabled={isPublishing}>
+              <TouchableOpacity style={[styles.publishBtn, { backgroundColor: colors.accent }]} onPress={handleCreatePost} disabled={isPublishing}>
                 {isPublishing ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.publishBtnText}>Опубликовать</Text>}
               </TouchableOpacity>
             </View>
@@ -533,21 +584,21 @@ export default function SocialApp() {
         </View>
       </Modal>
 
-      {/* Bottom Navigation */}
-      <View style={styles.navBar}>
+      {/* Навигация */}
+      <View style={[styles.navBar, { backgroundColor: colors.bg2, borderTopColor: colors.border }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('feed')}>
-          <Text style={[styles.navIcon, activeTab === 'feed' && styles.navActive]}>🏠</Text>
-          <Text style={[styles.navLabel, activeTab === 'feed' && styles.navLabelActive]}>Лента</Text>
+          <Text style={[styles.navIcon, activeTab === 'feed' && { opacity: 1 }]}>🏠</Text>
+          <Text style={[styles.navLabel, { color: activeTab === 'feed' ? colors.accent : colors.subtext }]}>Лента</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('cluster')}>
-          <Text style={[styles.navIcon, activeTab === 'cluster' && styles.navActive]}>🌐</Text>
-          <Text style={[styles.navLabel, activeTab === 'cluster' && styles.navLabelActive]}>Ноды (Mesh)</Text>
+          <Text style={[styles.navIcon, activeTab === 'cluster' && { opacity: 1 }]}>🌐</Text>
+          <Text style={[styles.navLabel, { color: activeTab === 'cluster' ? colors.accent : colors.subtext }]}>Ноды Z</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('profile')}>
-          <Text style={[styles.navIcon, activeTab === 'profile' && styles.navActive]}>👤</Text>
-          <Text style={[styles.navLabel, activeTab === 'profile' && styles.navLabelActive]}>Профиль</Text>
+          <Text style={[styles.navIcon, activeTab === 'profile' && { opacity: 1 }]}>👤</Text>
+          <Text style={[styles.navLabel, { color: activeTab === 'profile' ? colors.accent : colors.subtext }]}>Профиль</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -555,81 +606,79 @@ export default function SocialApp() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f5f8' },
-  header: { height: 56, backgroundColor: '#ffffff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  logoText: { fontSize: 18, fontWeight: '800', color: '#6366f1' },
-  createPostBtn: { backgroundColor: '#6366f1', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  createPostBtnText: { color: '#ffffff', fontWeight: '600', fontSize: 13 },
-  authBtn: { borderHeight: 1, borderColor: '#6366f1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  authBtnText: { color: '#6366f1', fontSize: 12, fontWeight: '600' },
-  userBadgeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 16, gap: 4 },
-  miniAvatar: { width: 22, height: 22, borderRadius: 11 },
-  miniUsername: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  container: { flex: 1 },
+  header: { height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1 },
+  logoBadge: { width: 26, height: 26, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  logoText: { color: '#ffffff', fontWeight: '900', fontSize: 16 },
+  brandTitle: { fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  iconThemeBtn: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  createPostBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  createPostBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 12 },
+  authBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  authBtnText: { fontSize: 12, fontWeight: '700' },
+  userBadgeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, gap: 6 },
+  miniAvatar: { width: 20, height: 20, borderRadius: 10 },
+  miniUsername: { fontSize: 12, fontWeight: '600' },
   feedScroll: { flex: 1 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  loadingText: { marginTop: 12, color: '#6b7280', fontSize: 14 },
-  errorText: { color: '#ef4444', textAlign: 'center', marginBottom: 12, fontSize: 14 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937', marginBottom: 4 },
-  emptySub: { color: '#6b7280', fontSize: 14, marginBottom: 16, textAlign: 'center' },
-  retryBtn: { backgroundColor: '#6366f1', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
-  retryBtnText: { color: '#ffffff', fontWeight: '600' },
-  postCard: { backgroundColor: '#ffffff', marginBottom: 10, padding: 14, borderRadius: 12, marginHorizontal: 8, marginTop: 8 },
+  loadingText: { marginTop: 12, fontSize: 13 },
+  errorText: { textAlign: 'center', marginBottom: 12, fontSize: 13 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  emptySub: { fontSize: 13, marginBottom: 16, textAlign: 'center' },
+  retryBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  retryBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
+  postCard: { marginBottom: 10, padding: 14, borderRadius: 10, borderWidth: 1, marginHorizontal: 10, marginTop: 10 },
   postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  authorAvatar: { width: 42, height: 42, borderRadius: 21, marginRight: 10 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', bottom: 0, right: 10, borderWidth: 2, borderColor: '#fff' },
-  statusDotLarge: { width: 16, height: 16, borderRadius: 8, position: 'absolute', bottom: 2, right: 2, borderWidth: 3, borderColor: '#fff' },
+  authorAvatar: { width: 40, height: 40, borderRadius: 8, marginRight: 10 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, position: 'absolute', bottom: -2, right: 8, borderWidth: 1 },
+  statusDotLarge: { width: 14, height: 14, borderRadius: 7, position: 'absolute', bottom: 2, right: 2, borderWidth: 2 },
   postHeaderInfo: { justifyContent: 'center' },
-  authorName: { fontWeight: '700', fontSize: 15, color: '#1f2937' },
-  roleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  authorName: { fontWeight: '700', fontSize: 14 },
+  roleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   roleBadgeText: { color: '#ffffff', fontSize: 9, fontWeight: '800' },
-  postTime: { fontSize: 12, color: '#9ca3af' },
-  postText: { fontSize: 14, color: '#374151', lineHeight: 20, marginBottom: 10 },
-  postImage: { width: '100%', height: 200, borderRadius: 10, marginBottom: 10 },
-  postActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 8 },
+  postTime: { fontSize: 11, marginTop: 1 },
+  postText: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
+  postImage: { width: '100%', height: 210, borderRadius: 8, marginBottom: 10 },
+  postActions: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 8 },
   actionBtn: { flexDirection: 'row', alignItems: 'center' },
-  actionIcon: { fontSize: 16, marginRight: 4 },
-  actionText: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  likedText: { color: '#ef4444', fontWeight: '700' },
-  centerTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937', marginBottom: 4 },
-  centerSub: { color: '#6b7280', fontSize: 13, marginBottom: 16 },
-  clusterCard: { backgroundColor: '#ffffff', padding: 16, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#6366f1' },
-  clusterCardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6, color: '#111827' },
-  clusterDetail: { fontSize: 13, color: '#4b5563', marginBottom: 2 },
-  nodeItem: { backgroundColor: '#ffffff', padding: 14, borderRadius: 10, marginBottom: 10 },
-  nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  nodeIdText: { fontWeight: '700', fontSize: 14, color: '#1f2937' },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  statusBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: '700' },
-  nodeSub: { fontSize: 12, color: '#6b7280' },
-  profileName: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  profileUsername: { fontSize: 14, color: '#6b7280', marginBottom: 8 },
-  bioBox: { backgroundColor: '#ffffff', padding: 14, borderRadius: 12, width: '100%', marginTop: 12 },
-  bioTitle: { fontSize: 13, fontWeight: '700', color: '#4b5563', marginBottom: 4 },
-  bioText: { fontSize: 14, color: '#1f2937' },
-  roleTestCard: { backgroundColor: '#ffffff', padding: 14, borderRadius: 12, width: '100%', marginTop: 12 },
-  roleTestTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
-  roleTestSub: { fontSize: 12, color: '#6b7280', marginBottom: 10 },
+  actionIcon: { fontSize: 15, marginRight: 4 },
+  actionText: { fontSize: 12, fontWeight: '600' },
+  centerTitle: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  centerSub: { fontSize: 12, marginBottom: 16 },
+  clusterCard: { padding: 14, borderRadius: 10, borderLeftWidth: 4, marginBottom: 10 },
+  clusterCardTitle: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  clusterDetail: { fontSize: 12, marginBottom: 2 },
+  nodeItem: { padding: 12, borderRadius: 8, borderWidth: 1, marginBottom: 8 },
+  nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  nodeIdText: { fontWeight: '700', fontSize: 13 },
+  statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  statusBadgeText: { color: '#ffffff', fontSize: 9, fontWeight: '800' },
+  nodeSub: { fontSize: 11 },
+  profileName: { fontSize: 18, fontWeight: '800' },
+  profileUsername: { fontSize: 13, marginBottom: 6 },
+  bioBox: { padding: 12, borderRadius: 8, borderWidth: 1, width: '100%', marginTop: 10 },
+  bioTitle: { fontSize: 11, fontWeight: '700', marginBottom: 4 },
+  bioText: { fontSize: 13 },
+  roleTestCard: { padding: 12, borderRadius: 8, borderWidth: 1, width: '100%', marginTop: 10 },
+  roleTestTitle: { fontSize: 13, fontWeight: '800' },
+  roleTestSub: { fontSize: 11, marginBottom: 8 },
   roleBtnGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  roleSelectBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, backgroundColor: '#f9fafb' },
-  roleSelectBtnActive: { backgroundColor: '#6366f1' },
-  roleSelectText: { fontSize: 12, fontWeight: '600', color: '#374151' },
-  roleSelectTextActive: { color: '#ffffff' },
-  logoutBtn: { marginTop: 20, padding: 12, backgroundColor: '#fee2e2', borderRadius: 8, width: '100%', alignItems: 'center' },
-  logoutBtnText: { color: '#ef4444', fontWeight: '700' },
-  navBar: { height: 60, backgroundColor: '#ffffff', flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  roleSelectBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1 },
+  roleSelectText: { fontSize: 11, fontWeight: '700' },
+  logoutBtn: { marginTop: 16, padding: 10, borderRadius: 8, borderWidth: 1, width: '100%', alignItems: 'center' },
+  logoutBtnText: { fontWeight: '700', fontSize: 13 },
+  navBar: { height: 56, flexDirection: 'row', borderTopWidth: 1 },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  navIcon: { fontSize: 18, opacity: 0.5 },
-  navActive: { opacity: 1 },
-  navLabel: { fontSize: 10, color: '#9ca3af', marginTop: 2 },
-  navLabelActive: { color: '#6366f1', fontWeight: '700' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, color: '#1f2937' },
-  textInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, textAlignVertical: 'top', fontSize: 14, marginBottom: 12 },
-  singleInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, fontSize: 14, marginBottom: 12 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
-  cancelBtnText: { color: '#6b7280', fontWeight: '600' },
-  publishBtn: { backgroundColor: '#6366f1', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, minWidth: 100, alignItems: 'center' },
-  publishBtnText: { color: '#ffffff', fontWeight: '600' },
+  navIcon: { fontSize: 16, opacity: 0.5 },
+  navLabel: { fontSize: 10, marginTop: 2, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', padding: 16 },
+  modalContent: { borderRadius: 12, borderWidth: 1, padding: 18 },
+  modalTitle: { fontSize: 16, fontWeight: '800', marginBottom: 14 },
+  textInput: { borderWidth: 1, borderRadius: 8, padding: 10, textAlignVertical: 'top', fontSize: 13, marginBottom: 10 },
+  singleInput: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 10 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  cancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  cancelBtnText: { fontWeight: '600', fontSize: 13 },
+  publishBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 6, minWidth: 90, alignItems: 'center' },
+  publishBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
 });
