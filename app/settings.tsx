@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch } from 'react-native';
-import { ArrowLeft, Globe, Lock, LogOut, ChevronRight, Moon } from 'lucide-react-native';
+import { ArrowLeft, Globe, Lock, LogOut, Moon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { translations, Language } from './i18n';
@@ -78,8 +78,8 @@ export default function SettingsScreen() {
               <LogOut color="#f85149" size={20} />
               <Text style={[styles.rowText, { color: '#f85149' }]}>{t.signOut}</Text>
             </View>
-          </TouchableOpacity>
-        </View>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
