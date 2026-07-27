@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, useWindowDimensions, ScrollView } from 'react-native';
 import { Octicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import Animated, { FadeInDown, FadeInRight, FadeOutLeft, Layout } from 'react-native-reanimated';
+import Animated, { FadeInRight, FadeOutLeft, Layout } from 'react-native-reanimated';
 import { checkUsername, registerUser, setAuthToken } from '../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -12,7 +12,6 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
-  const { width } = useWindowDimensions();
 
   const nextStep = async () => {
     if (step === 1) {
@@ -43,56 +42,52 @@ export default function RegisterScreen() {
     } catch (e) {} finally { setLoading(false); }
   };
 
-  const StepIndicator = () => (
-    <View style={styles.stepIndicator}>
-      {[1, 2, 3].map(s => (
-        <View key={s} style={[styles.dot, step >= s && styles.activeDot, step === s && styles.currentDot]} />
-      ))}
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeInDown.duration(800)} layout={Layout} style={styles.card}>
+        <Animated.View layout={Layout} style={styles.card}>
           <View style={styles.cardHeader}>
              <TouchableOpacity style={styles.iconBtn} onPress={() => step > 1 ? setStep(step-1) : router.back()}>
-               <Octicons name="arrow-left" size={20} color="#8b949e" />
+               <Octicons name="arrow-left" size={18} color="#8b949e" />
              </TouchableOpacity>
-             <StepIndicator />
-             <View style={{ width: 40 }} />
+             <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
+             </View>
+             <Text style={styles.stepCounter}>{step}/3</Text>
           </View>
 
           <View style={styles.contentArea}>
             {step === 1 && (
               <Animated.View key="step1" entering={FadeInRight} exiting={FadeOutLeft}>
-                <Text style={styles.stepTitle}>Как вас называть?</Text>
-                <Text style={styles.stepSub}>Выберите уникальный логин для идентификации в Z-сети.</Text>
+                <Text style={styles.stepTitle}>Начнем с логина</Text>
+                <Text style={styles.stepSub}>Это ваше имя в системе Z. Оно должно быть уникальным.</Text>
                 
-                <View style={styles.fieldWrapper}>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.label}>Имя пользователя</Text>
                   <TextInput 
                     style={[styles.input, available === false && styles.inputError]} 
-                    placeholder="Username" 
+                    placeholder="Напр. developer_z" 
                     placeholderTextColor="#484f58"
                     value={form.username}
                     onChangeText={v => { setForm({...form, username: v}); setAvailable(null); }}
                     autoCapitalize="none"
                   />
-                  {available === false && <Text style={styles.errorHint}>Этот идентификатор уже занят другим узлом.</Text>}
+                  {available === false && <Text style={styles.errorHint}>Логин уже занят</Text>}
                 </View>
 
                 <TouchableOpacity style={styles.nextBtn} onPress={nextStep} disabled={loading}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.nextBtnText}>Подтвердить логин</Text>}
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.nextBtnText}>Продолжить</Text>}
                 </TouchableOpacity>
               </Animated.View>
             )}
 
             {step === 2 && (
               <Animated.View key="step2" entering={FadeInRight} exiting={FadeOutLeft}>
-                <Text style={styles.stepTitle}>Канал связи</Text>
-                <Text style={styles.stepSub}>Электронная почта используется для критических уведомлений и восстановления.</Text>
+                <Text style={styles.stepTitle}>Контактные данные</Text>
+                <Text style={styles.stepSub}>Email необходим для защиты и восстановления аккаунта.</Text>
                 
-                <View style={styles.fieldWrapper}>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.label}>Электронная почта</Text>
                   <TextInput 
                     style={styles.input} 
                     placeholder="email@example.com" 
@@ -112,26 +107,29 @@ export default function RegisterScreen() {
 
             {step === 3 && (
               <Animated.View key="step3" entering={FadeInRight} exiting={FadeOutLeft}>
-                <Text style={styles.stepTitle}>Протокол защиты</Text>
-                <Text style={styles.stepSub}>Создайте надежный пароль для шифрования ваших данных.</Text>
+                <Text style={styles.stepTitle}>Безопасность</Text>
+                <Text style={styles.stepSub}>Создайте надежный пароль для доступа к вашему узлу.</Text>
                 
-                <View style={styles.fieldWrapper}>
-                  <View style={styles.passBox}>
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.label}>Новый пароль</Text>
+                  <View style={styles.passField}>
                     <TextInput 
-                      style={styles.inputPass} 
-                      placeholder="Придумайте пароль" 
+                      style={styles.inputBase} 
+                      placeholder="Минимум 8 символов" 
                       placeholderTextColor="#484f58"
                       secureTextEntry={!showPass}
                       value={form.password}
                       onChangeText={v => setForm({...form, password: v})}
                     />
                     <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                      <Octicons name={showPass ? "eye-closed" : "eye"} size={20} color="#8b949e" />
+                      <Octicons name={showPass ? "eye-closed" : "eye"} size={16} color="#8b949e" />
                     </TouchableOpacity>
                   </View>
+                  
+                  <Text style={[styles.label, { marginTop: 12 }]}>Повторите пароль</Text>
                   <TextInput 
-                    style={[styles.input, { marginTop: 12 }]} 
-                    placeholder="Повторите пароль" 
+                    style={styles.input} 
+                    placeholder="Подтверждение пароля" 
                     placeholderTextColor="#484f58"
                     secureTextEntry={!showPass}
                     value={form.confirm}
@@ -140,14 +138,14 @@ export default function RegisterScreen() {
                 </View>
 
                 <TouchableOpacity style={[styles.nextBtn, { backgroundColor: '#238636' }]} onPress={handleRegister} disabled={loading}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.nextBtnText}>Активировать аккаунт</Text>}
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.nextBtnText}>Создать аккаунт</Text>}
                 </TouchableOpacity>
               </Animated.View>
             )}
           </View>
 
           <TouchableOpacity style={styles.footerLink} onPress={() => router.push('/auth/login')}>
-            <Text style={styles.footerLinkText}>Уже есть аккаунт? <Text style={{ color: '#d66853' }}>Войти</Text></Text>
+            <Text style={styles.footerText}>Уже есть узел? <Text style={{ color: '#58a6ff' }}>Войти</Text></Text>
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
@@ -158,24 +156,24 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 440, backgroundColor: '#161b22', borderRadius: 28, padding: 28, borderWidth: 1, borderColor: '#30363d' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 },
-  iconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#0d1117', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#30363d' },
-  stepIndicator: { flexDirection: 'row', gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#30363d' },
-  activeDot: { backgroundColor: '#d66853', width: 24 },
-  currentDot: { shadowColor: '#d66853', shadowOpacity: 0.8, shadowRadius: 10 },
-  contentArea: { minHeight: 300 },
-  stepTitle: { color: '#f0f6fc', fontSize: 26, fontWeight: '900', marginBottom: 12, letterSpacing: -0.5 },
-  stepSub: { color: '#8b949e', fontSize: 15, lineHeight: 22, marginBottom: 32 },
-  fieldWrapper: { marginBottom: 32 },
-  input: { backgroundColor: '#0d1117', borderRadius: 16, borderWidth: 1, borderColor: '#30363d', height: 58, paddingHorizontal: 18, color: '#f0f6fc', fontSize: 16 },
+  card: { width: '100%', maxWidth: 420, backgroundColor: '#161b22', borderRadius: 12, padding: 28, borderWidth: 1, borderColor: '#30363d' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 32 },
+  iconBtn: { padding: 4 },
+  progressTrack: { flex: 1, height: 4, backgroundColor: '#0d1117', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#238636' },
+  stepCounter: { color: '#8b949e', fontSize: 12, fontWeight: '700' },
+  contentArea: { minHeight: 320 },
+  stepTitle: { color: '#f0f6fc', fontSize: 22, fontWeight: '700', marginBottom: 8 },
+  stepSub: { color: '#8b949e', fontSize: 14, lineHeight: 20, marginBottom: 24 },
+  inputWrapper: { marginBottom: 24 },
+  label: { color: '#f0f6fc', fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { backgroundColor: '#0d1117', borderRadius: 6, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12, color: '#f0f6fc', fontSize: 14 },
   inputError: { borderColor: '#f85149' },
-  errorHint: { color: '#f85149', fontSize: 12, marginTop: 8, marginLeft: 4, fontWeight: '600' },
-  passBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 16, borderWidth: 1, borderColor: '#30363d', height: 58, paddingHorizontal: 18 },
-  inputPass: { flex: 1, color: '#f0f6fc', fontSize: 16, height: '100%' },
-  nextBtn: { backgroundColor: '#d66853', height: 60, borderRadius: 18, justifyContent: 'center', alignItems: 'center', shadowColor: '#d66853', shadowOpacity: 0.3, shadowRadius: 12 },
-  nextBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  footerLink: { marginTop: 32, alignItems: 'center' },
-  footerLinkText: { color: '#8b949e', fontSize: 14, fontWeight: '600' }
+  errorHint: { color: '#f85149', fontSize: 12, marginTop: 6 },
+  passField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 6, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12 },
+  inputBase: { flex: 1, color: '#f0f6fc', fontSize: 14 },
+  nextBtn: { backgroundColor: '#21262d', height: 44, borderRadius: 6, borderWidth: 1, borderColor: '#30363d', justifyContent: 'center', alignItems: 'center' },
+  nextBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  footerLink: { marginTop: 24, alignItems: 'center' },
+  footerText: { color: '#8b949e', fontSize: 14 }
 });
