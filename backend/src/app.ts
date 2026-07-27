@@ -1,16 +1,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { config } from './config.js';
 import { clusterService } from './services/clusterService.js';
+import { hashPassword, verifyPassword, encryptField, decryptField } from './utils/crypto.js';
 
 const app = express();
 export const prisma = new PrismaClient();
 
-// Настройка CORS с помощью пакета cors
 app.use(
   cors({
-    origin: true, // Разрешает текущий Origin запроса (например, http://localhost:32109)
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
@@ -19,25 +20,48 @@ app.use(
 
 app.use(express.json());
 
-// Логирование входящих запросов в консоль Docker
+// Логирование входящих запросов
 app.use((req: Request, res: Response, next: NextFunction) => {
   console.log(`[REQ] ${new Date().toISOString()} ${req.method} ${req.url} | Origin: ${req.headers.origin || 'N/A'}`);
   next();
 });
 
-// Инициализация дефолтного пользователя
+// Вспомогательная функция генерирования JWT токена
+function generateToken(userId: string) {
+  return jwt.sign({ userId }, config.jwtSecret, { expiresIn: '30d' });
+}
+
+// Извлечение текущего пользователя из JWT токена
+async function getUserFromReq(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+    return await prisma.user.findUnique({ where: { id: decoded.userId } });
+  } catch (e) {
+    return null;
+  }
+}
+
+// Инициализация дефолтного администратора
 async function initDefaultUser() {
   try {
-    const existingUser = await prisma.user.findFirst();
+    const existingUser = await prisma.user.findUnique({ where: { username: 'master_admin' } });
     if (!existingUser) {
       await prisma.user.create({
         data: {
           username: 'master_admin',
-          name: 'Администратор Ноды',
+          password: hashPassword('admin123'),
+          firstName: 'Администратор',
+          lastName: 'Ноды',
+          role: 'root',
+          status: 'online',
+          bio: encryptField('Главный администратор центральной ноды Mesh-сети'),
           avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
         },
       });
-      console.log('[Database] Создан дефолтный пользователь master_admin');
+      console.log('[Database] Создан дефолтный пользователь master_admin (Role: root, Pass: admin123)');
     }
   } catch (err) {
     console.error('[Database] Ошибка проверки пользователя:', err);
@@ -52,11 +76,161 @@ app.get('/api/health', (req: Request, res: Response) => {
     nodeId: config.nodeId,
     isMaster: config.isMasterNode,
     timestamp: new Date().toISOString(),
-    env: config.nodeEnv,
   });
 });
 
-// GET /api/posts — Получение всех постов из базы данных
+// ====== АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ======
+
+// POST /api/auth/register — Регистрация нового пользователя
+app.post('/api/auth/register', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { username, password, firstName, lastName, bio, socialLinks, birthDate, avatar } = req.body || {};
+
+    if (!username || !password || !firstName) {
+      return res.status(400).json({ error: 'Логин, пароль и имя обязательны для заполнения' });
+    }
+
+    if (username.length < 3) {
+      return res.status(400).json({ error: 'Логин должен быть не менее 3 символов' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { username } });
+    if (existing) {
+      return res.status(400).json({ error: 'Пользователь с таким логином уже существует' });
+    }
+
+    // Шифруем чувствительные данные перед сохранением в PostgreSQL
+    const encryptedBio = bio ? encryptField(bio.slice(0, 256)) : null;
+    const encryptedLinks = socialLinks ? encryptField(typeof socialLinks === 'string' ? socialLinks : JSON.stringify(socialLinks)) : null;
+    const encryptedBirthDate = birthDate ? encryptField(birthDate) : null;
+
+    const user = await prisma.user.create({
+      data: {
+        username,
+        password: hashPassword(password),
+        firstName,
+        lastName: lastName || null,
+        role: 'user', // Роль по умолчанию
+        status: 'online',
+        bio: encryptedBio,
+        socialLinks: encryptedLinks,
+        birthDate: encryptedBirthDate,
+        avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
+        lastSeen: new Date(),
+      },
+    });
+
+    const token = generateToken(user.id);
+
+    return res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        status: user.status,
+        bio: decryptField(user.bio),
+        socialLinks: decryptField(user.socialLinks),
+        birthDate: decryptField(user.birthDate),
+        avatar: user.avatar,
+        lastSeen: user.lastSeen,
+      },
+    });
+  } catch (err) {
+    console.error('Ошибка регистрации:', err);
+    return res.status(500).json({ error: 'Не удалось зарегистрировать пользователя' });
+  }
+});
+
+// POST /api/auth/login — Вход
+app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Введите логин и пароль' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user || !verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    // Обновляем статус на online и время входа
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { status: 'online', lastSeen: new Date() },
+    });
+
+    const token = generateToken(user.id);
+
+    return res.json({
+      token,
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        bio: decryptField(updatedUser.bio),
+        socialLinks: decryptField(updatedUser.socialLinks),
+        birthDate: decryptField(updatedUser.birthDate),
+        avatar: updatedUser.avatar,
+        lastSeen: updatedUser.lastSeen,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Ошибка входа в систему' });
+  }
+});
+
+// GET /api/auth/me — Получить профиль текущего авторизованного пользователя
+app.get('/api/auth/me', async (req: Request, res: Response): Promise<any> => {
+  const user = await getUserFromReq(req);
+  if (!user) return res.status(401).json({ error: 'Не авторизован' });
+
+  res.json({
+    id: user.id,
+    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    status: user.status,
+    bio: decryptField(user.bio),
+    socialLinks: decryptField(user.socialLinks),
+    birthDate: decryptField(user.birthDate),
+    avatar: user.avatar,
+    lastSeen: user.lastSeen,
+  });
+});
+
+// PUT /api/auth/role — Ручка для смены роли (для тестов)
+app.put('/api/auth/role', async (req: Request, res: Response): Promise<any> => {
+  const user = await getUserFromReq(req);
+  if (!user) return res.status(401).json({ error: 'Не авторизован' });
+
+  const { role } = req.body || {};
+  const validRoles = ['user', 'root', 'admin', 'moderator', 'tester', 'helper'];
+  if (!role || !validRoles.includes(role)) {
+    return res.status(400).json({ error: 'Недопустимая роль' });
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { role },
+  });
+
+  res.json({
+    message: 'Роль успешно изменена',
+    role: updated.role,
+  });
+});
+
+// ====== ПОСТЫ =====
+
+// GET /api/posts
 app.get('/api/posts', async (req: Request, res: Response) => {
   try {
     const posts = await prisma.post.findMany({
@@ -67,44 +241,39 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       },
     });
 
+    const currentUser = await getUserFromReq(req);
+
     const formattedPosts = posts.map((post) => ({
       id: post.id,
       author: {
-        name: post.author.name,
+        name: `${post.author.firstName} ${post.author.lastName || ''}`.trim(),
         username: post.author.username,
         avatar: post.author.avatar || '',
+        role: post.author.role,
+        status: post.author.status,
       },
       content: post.content,
       image: post.imageUrl || undefined,
       likes: post.likes.length,
-      isLiked: post.likes.some((l) => l.userId === post.authorId),
+      isLiked: currentUser ? post.likes.some((l) => l.userId === currentUser.id) : false,
       createdAt: post.createdAt,
     }));
 
     res.json(formattedPosts);
   } catch (error) {
-    console.error('Ошибка получения постов:', error);
-    res.status(500).json({ error: 'Ошибка сервера при загрузке постов' });
+    res.status(500).json({ error: 'Ошибка загрузки постов' });
   }
 });
 
-// POST /api/posts — Создание нового поста в базе данных
+// POST /api/posts — Создание поста
 app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
   try {
+    const user = await getUserFromReq(req);
+    if (!user) return res.status(401).json({ error: 'Сначала войдите в систему' });
+
     const { content, imageUrl } = req.body || {};
     if (!content || typeof content !== 'string' || content.trim() === '') {
       return res.status(400).json({ error: 'Текст поста не может быть пустым' });
-    }
-
-    let user = await prisma.user.findFirst();
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          username: 'user_' + Math.floor(Math.random() * 1000),
-          name: 'Пользователь Mesh',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200',
-        },
-      });
     }
 
     const post = await prisma.post.create({
@@ -122,9 +291,11 @@ app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
     return res.status(201).json({
       id: post.id,
       author: {
-        name: post.author.name,
+        name: `${post.author.firstName} ${post.author.lastName || ''}`.trim(),
         username: post.author.username,
         avatar: post.author.avatar || '',
+        role: post.author.role,
+        status: post.author.status,
       },
       content: post.content,
       image: post.imageUrl || undefined,
@@ -133,17 +304,17 @@ app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
       createdAt: post.createdAt,
     });
   } catch (error) {
-    console.error('Ошибка при создании поста:', error);
     return res.status(500).json({ error: 'Не удалось сохранить пост в БД' });
   }
 });
 
-// POST /api/posts/:id/like — Лайк
+// POST /api/posts/:id/like
 app.post('/api/posts/:id/like', async (req: Request, res: Response): Promise<any> => {
   try {
+    const user = await getUserFromReq(req);
+    if (!user) return res.status(401).json({ error: 'Авторизуйтесь для оценки постов' });
+
     const postId = req.params.id;
-    const user = await prisma.user.findFirst();
-    if (!user) return res.status(400).json({ error: 'Пользователь не найден' });
 
     const existingLike = await prisma.like.findUnique({
       where: {
@@ -171,32 +342,6 @@ app.post('/api/posts/:id/like', async (req: Request, res: Response): Promise<any
 app.get('/api/cluster/nodes', async (req: Request, res: Response) => {
   const status = await clusterService.getClusterStatus();
   res.json(status);
-});
-
-app.post('/api/cluster/register', async (req: Request, res: Response): Promise<any> => {
-  const { nodeId, url, secret } = req.body || {};
-  if (secret !== config.clusterSecret) {
-    return res.status(403).json({ error: 'Неверный токен безопасности кластера' });
-  }
-
-  await clusterService.registerNode({
-    nodeId,
-    url,
-    status: 'active',
-    isMaster: false,
-    lastSeen: new Date().toISOString(),
-    dbSyncProgress: 100,
-  });
-
-  return res.json({ status: 'registered', masterNodeId: config.nodeId });
-});
-
-app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
-  const { nodeId } = req.body || {};
-  if (nodeId) {
-    await clusterService.handleHeartbeat(nodeId);
-  }
-  res.json({ status: 'ack' });
 });
 
 app.listen(config.port, '0.0.0.0', async () => {

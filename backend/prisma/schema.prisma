@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,25 +8,31 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  username  String   @unique
-  name      String
-  avatar    String?
-  gender    String?  // Автоматическая колонка
-  bio       String?  // Автоматическая колонка
-  metadata  Json?    // Гибкое поле для хранения ЛЮБЫХ произвольных данных без изменения схемы
-  createdAt DateTime @default(now())
-  posts     Post[]
-  likes     Like[]
+  id           String        @id @default(uuid())
+  username     String        @unique
+  password     String        // Зашифрованный хэш пароля
+  firstName    String
+  lastName     String?
+  role         String        @default("user") // user, root, admin, moderator, tester, helper
+  status       String        @default("offline") // online, offline
+  bio          String?       // Зашифрованное описание профиля (до 256 символов)
+  socialLinks  String?       // Зашифрованные ссылки на соцсети (JSON string)
+  avatar       String?
+  birthDate    String?       // Зашифрованная дата рождения
+  lastSeen     DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  posts        Post[]
+  likes        Like[]
 }
 
 model Post {
   id        String   @id @default(uuid())
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   content   String
   imageUrl  String?
-  metadata  Json?    // Произвольные доп. данные поста
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   likes     Like[]
 }
@@ -35,8 +40,8 @@ model Post {
 model Like {
   id        String   @id @default(uuid())
   postId    String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
@@ -44,10 +49,12 @@ model Like {
 }
 
 model ClusterNode {
-  nodeId         String   @id
+  id             String   @id @default(uuid())
+  nodeId         String   @unique
   url            String
   status         String   @default("active")
   isMaster       Boolean  @default(false)
+  nodeType       String   @default("full") // "full" (Основной узел) или "replica" (Репликационная нода)
   lastSeen       DateTime @default(now())
   dbSyncProgress Int      @default(100)
 }
