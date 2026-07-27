@@ -1,287 +1,216 @@
 import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  TextInput,
-  Modal,
-  ActivityIndicator,
-  Alert,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, useWindowDimensions, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Octicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { translations, Language } from './i18n';
-import {
-  fetchPosts,
-  createPost,
-  togglePostLike,
-  fetchClusterNodes,
-  registerUser,
-  loginUser,
-  updateUserRole,
-  setAuthToken,
-  fetchCurrentUser,
-  checkUsername,
-  updateProfile,
-} from './api';
+import { fetchCurrentUser, fetchPosts, setAuthToken } from './api';
 
-const FONT_FAMILY = Platform.select({
-  ios: '-apple-system',
-  android: 'sans-serif',
-  web: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
-});
-
-export default function SocialApp() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+export default function MainApp() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
   const [lang, setLang] = useState<Language>('ru');
-  const [activeTab, setActiveTab] = useState<'feed' | 'cluster' | 'profile'>('feed');
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'feed' | 'chats' | 'apps' | 'profile'>('feed');
+  const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
   const t = translations[lang];
 
-  const colors = theme === 'dark'
-    ? { bg1: '#0d1117', bg2: '#161b22', border: '#30363d', subtext: '#8b949e', text: '#c9d1d9', accent: '#d66853', success: '#238636' }
-    : { bg1: '#ffffff', bg2: '#f6f8fa', border: '#d0d7de', subtext: '#57606a', text: '#24292f', accent: '#d66853', success: '#2da44e' };
-
-  // Auth State
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [regStep, setRegStep] = useState(1);
-  const [showPass, setShowPass] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [authForm, setAuthForm] = useState({ username: '', password: '', confirm: '', email: '' });
-  const [authLoading, setAuthLoading] = useState(false);
-
   useEffect(() => {
-    initializeApp();
+    checkAuth();
+    loadContent();
   }, []);
 
-  const initializeApp = async () => {
-    const savedLang = await AsyncStorage.getItem('user_lang');
-    if (savedLang) setLang(savedLang as Language);
+  const checkAuth = async () => {
     const token = await AsyncStorage.getItem('auth_token');
-    if (token) {
-      setAuthToken(token);
-      const user = await fetchCurrentUser();
-      if (user) setCurrentUser(user);
+    if (!token) {
+      router.replace('/auth/login');
+      return;
     }
-    loadFeed();
+    setAuthToken(token);
+    const data = await fetchCurrentUser();
+    if (data) setUser(data);
+    else router.replace('/auth/login');
   };
 
-  const loadFeed = async () => {
-    setLoading(true);
+  const loadContent = async () => {
     try {
       const data = await fetchPosts();
       setPosts(data);
-    } catch (err) {} finally { setLoading(false); }
+    } catch (e) {} finally { setLoading(false); }
   };
 
-  const handleUsernameCheck = async (val: string) => {
-    setAuthForm({ ...authForm, username: val });
-    if (val.length < 3) {
-      setUsernameAvailable(null);
-      return;
-    }
-    const res = await checkUsername(val);
-    setUsernameAvailable(res.available);
+  const NavItem = ({ id, icon, label }: any) => {
+    const active = activeTab === id;
+    return (
+      <TouchableOpacity 
+        style={[styles.navItem, isDesktop && styles.desktopNavItem, active && styles.activeNavItem]} 
+        onPress={() => setActiveTab(id)}
+      >
+        <Octicons name={icon} size={isDesktop ? 20 : 18} color={active ? '#d66853' : '#8b949e'} />
+        <Text style={[styles.navText, active && styles.activeNavText, isDesktop && styles.desktopNavText]}>{label}</Text>
+      </TouchableOpacity>
+    );
   };
 
-  const handleAuthSubmit = async () => {
-    if (authMode === 'register' && authForm.password !== authForm.confirm) {
-      Alert.alert('Ошибка', 'Пароли не совпадают');
-      return;
-    }
-    setAuthLoading(true);
-    try {
-      const res = authMode === 'login' 
-        ? await loginUser({ username: authForm.username, password: authForm.password })
-        : await registerUser({ username: authForm.username, password: authForm.password, email: authForm.email });
-      
-      setAuthToken(res.token);
-      await AsyncStorage.setItem('auth_token', res.token);
-      setCurrentUser(res.user);
-      setIsAuthModalOpen(false);
-      loadFeed();
-    } catch (e: any) {
-      Alert.alert('Ошибка', e.message);
-    } finally { setAuthLoading(false); }
-  };
+  const Sidebar = () => (
+    <View style={styles.sidebar}>
+      <View style={styles.sidebarBrand}>
+        <View style={styles.miniLogo}><Octicons name="terminal" size={16} color="#fff" /></View>
+        <Text style={styles.brandName}>Z Platform</Text>
+      </View>
+      <View style={styles.sidebarNav}>
+        <NavItem id="feed" icon="home" label={t.home} />
+        <NavItem id="chats" icon="comment-discussion" label={t.chats} />
+        <NavItem id="apps" icon="apps" label={t.apps} />
+        <NavItem id="profile" icon="person" label={t.profile} />
+      </View>
+      {user && (
+        <View style={styles.sidebarFooter}>
+          <Image source={{ uri: user.avatar }} style={styles.sidebarAvatar} />
+          <View style={styles.sidebarUserInfo}>
+            <Text style={styles.sidebarUserName}>{user.firstName}</Text>
+            <Text style={styles.sidebarUserLogin}>@{user.username}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg1 }]}>
-      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={styles.container}>
+      <View style={[styles.shell, isDesktop && styles.desktopShell]}>
+        {isDesktop && <Sidebar />}
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.bg2, borderBottomColor: colors.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={[styles.logoBadge, { backgroundColor: colors.accent }]}>
-            <Octicons name="terminal" size={16} color="#ffffff" />
-          </View>
-          <Text style={[styles.brandTitle, { color: colors.text, fontFamily: FONT_FAMILY }]}>Z</Text>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            <Octicons name={theme === 'dark' ? 'sun' : 'moon'} size={14} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.langBtn, { borderColor: colors.border }]} onPress={() => setLang(lang === 'ru' ? 'en' : 'ru')}>
-            <Text style={{ color: colors.text, fontSize: 10, fontWeight: '800' }}>{lang.toUpperCase()}</Text>
-          </TouchableOpacity>
-          {currentUser ? (
-            <TouchableOpacity onPress={() => setActiveTab('profile')}>
-              <Image source={{ uri: currentUser.avatar }} style={styles.avatarMini} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.loginBtn, { borderColor: colors.border }]} onPress={() => { setAuthMode('login'); setIsAuthModalOpen(true); }}>
-              <Text style={[styles.loginBtnText, { color: colors.text, fontFamily: FONT_FAMILY }]}>{t.signIn}</Text>
-            </TouchableOpacity>
+        <View style={styles.content}>
+          {/* Mobile Header */}
+          {!isDesktop && (
+            <View style={styles.mobileHeader}>
+               <Text style={styles.headerTitle}>{t[activeTab]}</Text>
+               <TouchableOpacity onPress={() => setLang(lang === 'ru' ? 'en' : 'ru')} style={styles.langSwitch}>
+                 <Text style={styles.langText}>{lang.toUpperCase()}</Text>
+               </TouchableOpacity>
+            </View>
           )}
-        </View>
-      </View>
 
-      <ScrollView style={{ flex: 1 }}>
-        {activeTab === 'feed' && (
-          loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.accent} /> : 
-          posts.map((post) => (
-            <View key={post.id} style={[styles.card, { borderBottomColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <Image source={{ uri: post.author.avatar }} style={styles.authorImg} />
-                <View>
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>{post.author.name}</Text>
-                  <Text style={{ color: colors.subtext, fontSize: 12 }}>@{post.author.username}</Text>
+          <ScrollView style={styles.scroll}>
+            {activeTab === 'feed' && (
+              <Animated.View entering={FadeIn} style={styles.page}>
+                {loading ? <ActivityIndicator style={{ marginTop: 40 }} color="#d66853" /> : 
+                  posts.map(p => (
+                    <View key={p.id} style={styles.postCard}>
+                      <View style={styles.postHeader}>
+                        <Image source={{ uri: p.author.avatar }} style={styles.postAvatar} />
+                        <View>
+                          <Text style={styles.postAuthor}>{p.author.name}</Text>
+                          <Text style={styles.postMeta}>@{p.author.username}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.postContent}>{p.content}</Text>
+                    </View>
+                  ))
+                }
+              </Animated.View>
+            )}
+
+            {activeTab === 'chats' && (
+              <View style={styles.centerPage}>
+                <Octicons name="comment-discussion" size={48} color="#30363d" />
+                <Text style={styles.emptyText}>Сообщений пока нет</Text>
+              </View>
+            )}
+
+            {activeTab === 'apps' && (
+              <View style={styles.page}>
+                <Text style={styles.sectionTitle}>System Applications</Text>
+                <View style={styles.appGrid}>
+                   <TouchableOpacity style={styles.appItem} onPress={() => {}}>
+                      <View style={[styles.appIcon, { backgroundColor: '#d66853' }]}><Octicons name="server" size={24} color="#fff" /></View>
+                      <Text style={styles.appLabel}>{t.cluster}</Text>
+                   </TouchableOpacity>
                 </View>
               </View>
-              <Text style={{ color: colors.text, marginTop: 8, lineHeight: 20 }}>{post.content}</Text>
-            </View>
-          ))
-        )}
-
-        {activeTab === 'cluster' && (
-          <View style={{ padding: 20, alignItems: 'center' }}>
-            {currentUser && (currentUser.role === 'admin' || currentUser.role === 'root') ? (
-               <Text style={{ color: colors.text }}>System Nodes are active.</Text>
-            ) : (
-               <Text style={{ color: colors.accent }}>Access Restricted to Administrators.</Text>
             )}
-          </View>
-        )}
 
-        {activeTab === 'profile' && currentUser && (
-          <View style={{ padding: 20 }}>
-             <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-                <Image source={{ uri: currentUser.avatar }} style={styles.profileImg} />
-                <View>
-                  <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}>{currentUser.firstName}</Text>
-                  <Text style={{ color: colors.subtext }}>@{currentUser.username}</Text>
+            {activeTab === 'profile' && user && (
+              <View style={styles.page}>
+                <View style={styles.profileHeader}>
+                   <Image source={{ uri: user.avatar }} style={styles.largeAvatar} />
+                   <Text style={styles.profileName}>{user.firstName}</Text>
+                   <Text style={styles.profileHandle}>@{user.username}</Text>
+                   <View style={styles.roleTag}><Text style={styles.roleText}>{user.role.toUpperCase()}</Text></View>
                 </View>
-             </View>
-             <TouchableOpacity style={[styles.logoutBtn, { borderColor: colors.accent, marginTop: 30 }]} onPress={() => { setAuthToken(null); setCurrentUser(null); AsyncStorage.removeItem('auth_token'); }}>
-               <Text style={{ color: colors.accent }}>{t.signOut}</Text>
-             </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Improved Linear Auth Modal */}
-      <Modal visible={isAuthModalOpen} transparent animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
-            <View style={styles.modalHeader}>
-              <Text style={{ color: colors.text, fontWeight: '800' }}>{authMode === 'login' ? t.signIn : `${t.join} - Шаг ${regStep}/3`}</Text>
-              <TouchableOpacity onPress={() => setIsAuthModalOpen(false)}><Octicons name="x" size={20} color={colors.subtext} /></TouchableOpacity>
-            </View>
-
-            {authMode === 'login' ? (
-              <>
-                <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.username} placeholderTextColor={colors.subtext} value={authForm.username} onChangeText={v => setAuthForm({...authForm, username: v})} autoCapitalize="none" />
-                <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.password} placeholderTextColor={colors.subtext} secureTextEntry value={authForm.password} onChangeText={v => setAuthForm({...authForm, password: v})} />
-                <TouchableOpacity onPress={handleAuthSubmit} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
-                  {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{t.signIn}</Text>}
+                <TouchableOpacity style={styles.logoutBtn} onPress={async () => { await AsyncStorage.removeItem('auth_token'); router.replace('/auth/login'); }}>
+                  <Text style={styles.logoutText}>{t.signOut}</Text>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                {regStep === 1 && (
-                  <View>
-                    <TextInput style={[styles.input, { borderColor: usernameAvailable === false ? '#f85149' : colors.border, color: colors.text }]} placeholder={t.username} placeholderTextColor={colors.subtext} value={authForm.username} onChangeText={handleUsernameCheck} autoCapitalize="none" />
-                    {usernameAvailable === false && <Text style={{ color: '#f85149', fontSize: 12, marginBottom: 10 }}>Этот логин уже занят</Text>}
-                    <TouchableOpacity disabled={!usernameAvailable} onPress={() => setRegStep(2)} style={[styles.submitBtn, { backgroundColor: usernameAvailable ? colors.accent : colors.subtext }]}>
-                      <Text style={{ color: '#fff', fontWeight: '800' }}>Далее</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {regStep === 2 && (
-                  <View>
-                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Электронная почта" keyboardType="email-address" placeholderTextColor={colors.subtext} value={authForm.email} onChangeText={v => setAuthForm({...authForm, email: v})} autoCapitalize="none" />
-                    <TouchableOpacity onPress={() => setRegStep(3)} style={[styles.submitBtn, { backgroundColor: colors.accent }]}>
-                      <Text style={{ color: '#fff', fontWeight: '800' }}>Далее</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {regStep === 3 && (
-                  <View>
-                    <View style={{ position: 'relative' }}>
-                      <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.password} placeholderTextColor={colors.subtext} secureTextEntry={!showPass} value={authForm.password} onChangeText={v => setAuthForm({...authForm, password: v})} />
-                      <TouchableOpacity style={{ position: 'absolute', right: 12, top: 12 }} onPress={() => setShowPass(!showPass)}>
-                        <Octicons name={showPass ? "eye-closed" : "eye"} size={16} color={colors.subtext} />
-                      </TouchableOpacity>
-                    </View>
-                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Повторите пароль" placeholderTextColor={colors.subtext} secureTextEntry={!showPass} value={authForm.confirm} onChangeText={v => setAuthForm({...authForm, confirm: v})} />
-                    <TouchableOpacity onPress={handleAuthSubmit} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
-                      {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{t.createAccount}</Text>}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
+              </View>
             )}
+          </ScrollView>
 
-            <TouchableOpacity onPress={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setRegStep(1); }}>
-              <Text style={{ color: colors.accent, textAlign: 'center', marginTop: 15 }}>{authMode === 'login' ? t.newToZ : t.alreadyHaveAccount}</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Mobile TabBar */}
+          {!isDesktop && (
+            <View style={styles.bottomNav}>
+              <NavItem id="feed" icon="home" label={t.home} />
+              <NavItem id="chats" icon="comment-discussion" label={t.chats} />
+              <NavItem id="apps" icon="apps" label={t.apps} />
+              <NavItem id="profile" icon="person" label={t.profile} />
+            </View>
+          )}
         </View>
-      </Modal>
-
-      {/* Tabs */}
-      <View style={[styles.tabs, { backgroundColor: colors.bg2, borderTopColor: colors.border }]}>
-        {['feed', 'cluster', 'profile'].map((tab: any) => (
-          <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={styles.tabItem}>
-            <Octicons name={tab === 'feed' ? 'home' : tab === 'cluster' ? 'browser' : 'person'} size={20} color={activeTab === tab ? colors.accent : colors.subtext} />
-            <Text style={{ fontSize: 10, color: activeTab === tab ? colors.accent : colors.subtext }}>{t[tab as keyof typeof t]}</Text>
-          </TouchableOpacity>
-        ))}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1 },
-  logoBadge: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  brandTitle: { fontSize: 20, fontWeight: '900' },
-  iconBtn: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  langBtn: { paddingHorizontal: 8, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  loginBtn: { paddingHorizontal: 12, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center' },
-  loginBtnText: { fontWeight: '700', fontSize: 13 },
-  avatarMini: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#30363d' },
-  card: { padding: 16, borderBottomWidth: 1 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  authorImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#30363d' },
-  profileImg: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#30363d' },
-  logoutBtn: { height: 44, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalBox: { borderRadius: 12, borderWidth: 1, padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 15 },
-  submitBtn: { height: 44, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  tabs: { height: 65, flexDirection: 'row', borderTopWidth: 1 },
-  tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  container: { flex: 1, backgroundColor: '#0d1117' },
+  shell: { flex: 1, flexDirection: 'column' },
+  desktopShell: { flexDirection: 'row' },
+  sidebar: { width: 260, backgroundColor: '#161b22', borderRightWidth: 1, borderRightColor: '#30363d', padding: 20 },
+  sidebarBrand: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 32 },
+  miniLogo: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#d66853', justifyContent: 'center', alignItems: 'center' },
+  brandName: { color: '#c9d1d9', fontWeight: '800', fontSize: 18 },
+  sidebarNav: { flex: 1 },
+  sidebarFooter: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#30363d' },
+  sidebarAvatar: { width: 40, height: 40, borderRadius: 20 },
+  sidebarUserInfo: { flex: 1 },
+  sidebarUserName: { color: '#c9d1d9', fontWeight: '700', fontSize: 14 },
+  sidebarUserLogin: { color: '#8b949e', fontSize: 12 },
+  content: { flex: 1, backgroundColor: '#0d1117' },
+  mobileHeader: { height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#30363d' },
+  headerTitle: { color: '#c9d1d9', fontSize: 18, fontWeight: '800' },
+  langSwitch: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: '#30363d' },
+  langText: { color: '#8b949e', fontSize: 10, fontWeight: '800' },
+  scroll: { flex: 1 },
+  page: { padding: 20 },
+  centerPage: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 100 },
+  emptyText: { color: '#484f58', marginTop: 12, fontSize: 14 },
+  postCard: { backgroundColor: '#161b22', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#30363d' },
+  postHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  postAvatar: { width: 36, height: 36, borderRadius: 18 },
+  postAuthor: { color: '#c9d1d9', fontWeight: '700' },
+  postMeta: { color: '#8b949e', fontSize: 12 },
+  postContent: { color: '#c9d1d9', lineHeight: 22 },
+  appGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 16 },
+  appItem: { alignItems: 'center', gap: 8 },
+  appIcon: { width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  appLabel: { color: '#c9d1d9', fontSize: 12, fontWeight: '600' },
+  sectionTitle: { color: '#8b949e', fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  profileHeader: { alignItems: 'center', paddingVertical: 20 },
+  largeAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 2, borderColor: '#d66853' },
+  profileName: { color: '#c9d1d9', fontSize: 24, fontWeight: '800' },
+  profileHandle: { color: '#8b949e', fontSize: 16, marginBottom: 12 },
+  roleTag: { backgroundColor: '#30363d', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  roleText: { color: '#c9d1d9', fontSize: 10, fontWeight: '800' },
+  logoutBtn: { marginTop: 40, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#d66853', justifyContent: 'center', alignItems: 'center' },
+  logoutText: { color: '#d66853', fontWeight: '700' },
+  bottomNav: { height: 70, flexDirection: 'row', backgroundColor: '#161b22', borderTopWidth: 1, borderTopColor: '#30363d', paddingBottom: 10 },
+  navItem: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  desktopNavItem: { flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, marginBottom: 4 },
+  activeNavItem: { backgroundColor: 'rgba(214, 104, 83, 0.1)' },
+  navText: { fontSize: 10, color: '#8b949e', fontWeight: '600' },
+  desktopNavText: { fontSize: 14, marginLeft: 12 },
+  activeNavText: { color: '#d66853' }
 });
