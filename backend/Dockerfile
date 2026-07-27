@@ -10,7 +10,7 @@ COPY prisma ./prisma/
 
 RUN npm install
 
-# Генерация Prisma Client для системных целевых платформ
+# Генерация Prisma Client
 RUN npx prisma generate
 
 COPY . .
@@ -19,4 +19,5 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma db push && npm run start"]
+# Используем --force-reset для синхронизации схемы при несовместимых изменениях данных
+CMD ["sh", "-c", "npx prisma db push --force-reset && npm run start"]
