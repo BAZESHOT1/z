@@ -7,8 +7,12 @@ import { clusterService } from './services/clusterService.js';
 const app = express();
 export const prisma = new PrismaClient();
 
+// Безопасная настройка CORS для внешних локальных клиентов
 app.use(cors({
-  origin: config.allowedOrigins,
+  origin: (origin, callback) => {
+    // Разрешать все источники для разработки (включая localhost и сторонние веб-превью)
+    callback(null, true);
+  },
   credentials: true,
 }));
 
@@ -188,9 +192,10 @@ app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
   res.json({ status: 'ack' });
 });
 
-app.listen(config.port, async () => {
+// Явно слушаем интерфейс 0.0.0.0
+app.listen(config.port, '0.0.0.0', async () => {
   await initDefaultUser();
-  console.log(`[SocialNet Backend] Сервер запущен на порту ${config.port} (Node: ${config.nodeId})`);
+  console.log(`[SocialNet Backend] Сервер запущен на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
 });
 
 export default app;

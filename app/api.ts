@@ -1,4 +1,4 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://82.26.152.225:4000';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://132.243.235.23:4000';
 
 export async function fetchPosts() {
   const response = await fetch(`${API_URL}/api/posts`);
