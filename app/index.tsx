@@ -43,7 +43,7 @@ export default function MainApp() {
   };
 
   const handleTabPress = (tab: any) => {
-    if ((tab === 'profile' || tab === 'chats') &&!user
+    if ((tab === 'profile' || tab === 'chats') && !user) {
       router.push('/auth/login');
       return;
     }
