@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl"]
 }
 
 datasource db {
@@ -7,24 +8,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           String        @id @default(uuid())
-  username     String        @unique
-  password     String        // Зашифрованный хэш пароля
-  firstName    String
-  lastName     String?
-  role         String        @default("user") // user, root, admin, moderator, tester, helper
-  status       String        @default("offline") // online, offline
-  bio          String?       // Зашифрованное описание профиля (до 256 символов)
-  socialLinks  String?       // Зашифрованные ссылки на соцсети (JSON string)
-  avatar       String?
-  birthDate    String?       // Зашифрованная дата рождения
-  lastSeen     DateTime      @default(now())
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+enum Role {
+  user
+  root
+  admin
+  moderator
+  tester
+  helper
+}
 
-  posts        Post[]
-  likes        Like[]
+model User {
+  id          String   @id @default(uuid())
+  username    String   @unique
+  password    String
+  firstName   String
+  lastName    String?
+  role        String   @default("user")
+  status      String   @default("offline")
+  bio         String?
+  socialLinks String?
+  birthDate   String?
+  avatar      String?
+  lastSeen    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts Post[]
+  likes Like[]
 }
 
 model Post {
@@ -34,7 +44,9 @@ model Post {
   authorId  String
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  likes     Like[]
+  updatedAt DateTime @updatedAt
+
+  likes Like[]
 }
 
 model Like {
@@ -54,7 +66,8 @@ model ClusterNode {
   url            String
   status         String   @default("active")
   isMaster       Boolean  @default(false)
-  nodeType       String   @default("full") // "full" (Основной узел) или "replica" (Репликационная нода)
   lastSeen       DateTime @default(now())
   dbSyncProgress Int      @default(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
