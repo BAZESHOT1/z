@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, useWindowDimensions, ScrollView } from 'react-native';
-import { Octicons } from '@expo/vector-icons';
+import { ArrowLeft, Terminal, User, Lock, AlertCircle } from 'lucide-react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeInDown, FadeInUp, Layout } from 'react-native-reanimated';
@@ -36,12 +36,12 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={FadeInDown.duration(800)} layout={Layout} style={[styles.card, isDesktop && styles.desktopCard]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Octicons name="arrow-left" size={20} color="#8b949e" />
+            <ArrowLeft size={20} color="#8b949e" />
           </TouchableOpacity>
 
           <View style={styles.logoArea}>
             <View style={styles.logoBox}>
-              <Octicons name="terminal" size={32} color="#fff" />
+              <Terminal size={32} color="#fff" />
             </View>
             <Text style={styles.welcomeTitle}>Вход в Z Platform</Text>
             <Text style={styles.welcomeSub}>Введите свои данные для доступа к сети</Text>
@@ -49,7 +49,7 @@ export default function LoginScreen() {
 
           {error && (
             <Animated.View entering={FadeInDown} style={styles.errorBox}>
-              <Octicons name="alert" size={16} color="#f85149" />
+              <AlertCircle size={16} color="#f85149" />
               <Text style={styles.errorText}>{error}</Text>
             </Animated.View>
           )}
@@ -58,7 +58,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Text style={styles.inputLabel}>Логин (Username)</Text>
               <View style={styles.field}>
-                <Octicons name="person" size={18} color="#8b949e" style={styles.fieldIcon} />
+                <User size={18} color="#8b949e" style={styles.fieldIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Напр. ivan_dev" 
@@ -73,7 +73,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Text style={styles.inputLabel}>Пароль</Text>
               <View style={styles.field}>
-                <Octicons name="lock" size={18} color="#8b949e" style={styles.fieldIcon} />
+                <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Ваш секретный пароль" 
@@ -107,7 +107,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
-  bgGlow: { position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: 'rgba(35, 134, 54, 0.05)', filter: 'blur(100px)' } as any,
+  bgGlow: { position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: 'rgba(35, 134, 54, 0.05)' } as any,
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 420, backgroundColor: '#161b22', borderRadius: 12, padding: 32, borderWidth: 1, borderColor: '#30363d', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 30 },
   desktopCard: { padding: 40 },

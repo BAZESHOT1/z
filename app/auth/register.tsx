@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, useWindowDimensions, ScrollView } from 'react-native';
-import { Octicons } from '@expo/vector-icons';
+import { ArrowLeft, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { router } from 'expo-router';
 import Animated, { FadeInRight, FadeOutLeft, Layout } from 'react-native-reanimated';
 import { checkUsername, registerUser, setAuthToken } from '../api';
@@ -48,7 +48,7 @@ export default function RegisterScreen() {
         <Animated.View layout={Layout} style={styles.card}>
           <View style={styles.cardHeader}>
              <TouchableOpacity style={styles.iconBtn} onPress={() => step > 1 ? setStep(step-1) : router.back()}>
-               <Octicons name="arrow-left" size={18} color="#8b949e" />
+               <ArrowLeft size={20} color="#8b949e" />
              </TouchableOpacity>
              <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
@@ -60,18 +60,20 @@ export default function RegisterScreen() {
             {step === 1 && (
               <Animated.View key="step1" entering={FadeInRight} exiting={FadeOutLeft}>
                 <Text style={styles.stepTitle}>Начнем с логина</Text>
-                <Text style={styles.stepSub}>Это ваше имя в системе Z. Оно должно быть уникальным.</Text>
+                <Text style={styles.stepSub}>Это ваше уникальное имя в системе Z.</Text>
                 
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.label}>Имя пользователя</Text>
-                  <TextInput 
-                    style={[styles.input, available === false && styles.inputError]} 
-                    placeholder="Напр. developer_z" 
-                    placeholderTextColor="#484f58"
-                    value={form.username}
-                    onChangeText={v => { setForm({...form, username: v}); setAvailable(null); }}
-                    autoCapitalize="none"
-                  />
+                  <View style={styles.field}>
+                    <User size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <TextInput 
+                      style={[styles.input, available === false && styles.inputError]} 
+                      placeholder="Напр. developer_z" 
+                      placeholderTextColor="#484f58"
+                      value={form.username}
+                      onChangeText={v => { setForm({...form, username: v}); setAvailable(null); }}
+                      autoCapitalize="none"
+                    />
+                  </View>
                   {available === false && <Text style={styles.errorHint}>Логин уже занят</Text>}
                 </View>
 
@@ -87,16 +89,18 @@ export default function RegisterScreen() {
                 <Text style={styles.stepSub}>Email необходим для защиты и восстановления аккаунта.</Text>
                 
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.label}>Электронная почта</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="email@example.com" 
-                    placeholderTextColor="#484f58"
-                    keyboardType="email-address"
-                    value={form.email}
-                    onChangeText={v => setForm({...form, email: v})}
-                    autoCapitalize="none"
-                  />
+                  <View style={styles.field}>
+                    <Mail size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="email@example.com" 
+                      placeholderTextColor="#484f58"
+                      keyboardType="email-address"
+                      value={form.email}
+                      onChangeText={v => setForm({...form, email: v})}
+                      autoCapitalize="none"
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity style={styles.nextBtn} onPress={nextStep}>
@@ -108,13 +112,13 @@ export default function RegisterScreen() {
             {step === 3 && (
               <Animated.View key="step3" entering={FadeInRight} exiting={FadeOutLeft}>
                 <Text style={styles.stepTitle}>Безопасность</Text>
-                <Text style={styles.stepSub}>Создайте надежный пароль для доступа к вашему узлу.</Text>
+                <Text style={styles.stepSub}>Создайте надежный пароль.</Text>
                 
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.label}>Новый пароль</Text>
-                  <View style={styles.passField}>
+                  <View style={styles.field}>
+                    <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
                     <TextInput 
-                      style={styles.inputBase} 
+                      style={styles.input} 
                       placeholder="Минимум 8 символов" 
                       placeholderTextColor="#484f58"
                       secureTextEntry={!showPass}
@@ -122,19 +126,21 @@ export default function RegisterScreen() {
                       onChangeText={v => setForm({...form, password: v})}
                     />
                     <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                      <Octicons name={showPass ? "eye-closed" : "eye"} size={16} color="#8b949e" />
+                      {showPass ? <EyeOff size={18} color="#8b949e" /> : <Eye size={18} color="#8b949e" />}
                     </TouchableOpacity>
                   </View>
                   
-                  <Text style={[styles.label, { marginTop: 12 }]}>Повторите пароль</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Подтверждение пароля" 
-                    placeholderTextColor="#484f58"
-                    secureTextEntry={!showPass}
-                    value={form.confirm}
-                    onChangeText={v => setForm({...form, confirm: v})}
-                  />
+                  <View style={[styles.field, { marginTop: 12 }]}>
+                    <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="Повторите пароль" 
+                      placeholderTextColor="#484f58"
+                      secureTextEntry={!showPass}
+                      value={form.confirm}
+                      onChangeText={v => setForm({...form, confirm: v})}
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity style={[styles.nextBtn, { backgroundColor: '#238636' }]} onPress={handleRegister} disabled={loading}>
@@ -166,12 +172,11 @@ const styles = StyleSheet.create({
   stepTitle: { color: '#f0f6fc', fontSize: 22, fontWeight: '700', marginBottom: 8 },
   stepSub: { color: '#8b949e', fontSize: 14, lineHeight: 20, marginBottom: 24 },
   inputWrapper: { marginBottom: 24 },
-  label: { color: '#f0f6fc', fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  input: { backgroundColor: '#0d1117', borderRadius: 6, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12, color: '#f0f6fc', fontSize: 14 },
+  field: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 6, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12 },
+  fieldIcon: { marginRight: 10 },
+  input: { flex: 1, color: '#f0f6fc', fontSize: 14, height: '100%' },
   inputError: { borderColor: '#f85149' },
   errorHint: { color: '#f85149', fontSize: 12, marginTop: 6 },
-  passField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 6, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12 },
-  inputBase: { flex: 1, color: '#f0f6fc', fontSize: 14 },
   nextBtn: { backgroundColor: '#21262d', height: 44, borderRadius: 6, borderWidth: 1, borderColor: '#30363d', justifyContent: 'center', alignItems: 'center' },
   nextBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   footerLink: { marginTop: 24, alignItems: 'center' },
