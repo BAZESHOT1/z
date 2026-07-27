@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
-import { exec } from 'child_process'; // Добавлено для выполнения системных команд
+import { exec } from 'child_process';
 import crypto from 'crypto';
 import { PrismaClient, PrivacyLevel } from '@prisma/client';
 import { config } from './config';
@@ -13,40 +13,25 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// --- АВТО-ДЕПЛОЙ (WEBHOOK) ---
-// Этот эндпоинт будет вызываться GitHub при пуше
+// Webhook for Auto-Deploy
 app.post('/api/webhooks/deploy', (req: Request, res: Response) => {
   const signature = req.headers['x-hub-signature-256'];
-  const secret = config.jwtSecret; // Используем существующий секрет для простоты или добавь новый в .env
+  const secret = config.jwtSecret;
 
-  if (!signature) {
-    return res.status(401).send('No signature');
-  }
+  if (!signature) return res.status(401).send('No signature');
 
-  // Проверка подлинности запроса от GitHub (защита от злоумышленников)
   const hmac = crypto.createHmac('sha256', secret);
   const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
 
-  if (signature !== digest) {
-    return res.status(401).send('Invalid signature');
-  }
+  if (signature !== digest) return res.status(401).send('Invalid signature');
 
-  console.log('[Deploy] Получен сигнал от GitHub, начинаю обновление...');
-
-  // Выполняем git pull. 
-  // Если ты используешь Docker с монтированием папок (как в твоем docker-compose), 
-  // изменения сразу подхватятся.
-  exec('git pull', (err, stdout, stderr) => {
-    if (err) {
-      console.error(`[Deploy Error] ${err}`);
-      return res.status(500).send(err.message);
-    }
-    console.log(`[Deploy Success] ${stdout}`);
-    res.status(200).send('Deployed successfully');
+  console.log('[Deploy] Starting git pull...');
+  exec('git pull', (err, stdout) => {
+    if (err) return res.status(500).send(err.message);
+    res.status(200).send('Deployed');
   });
 });
 
-// Helper for Auth
 async function getUserFromReq(req: Request) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -54,12 +39,8 @@ async function getUserFromReq(req: Request) {
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
     return await prisma.user.findUnique({ where: { id: decoded.userId } });
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
-
-// ... остальной код (areFriends, canAccess, маршруты auth, users, posts) ...
 
 async function areFriends(userId1: string, userId2: string) {
   try {
@@ -84,18 +65,19 @@ async function canAccess(viewerId: string | undefined, owner: any, privacyField:
   return false;
 }
 
+// Routes
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
     const { username, password, email } = req.body;
     const user = await prisma.user.create({
       data: {
         username,
-        email: encryptField(email),
+        email: email ? encryptField(email) : null,
         password: hashPassword(password),
       },
     });
     res.status(201).json({ token: jwt.sign({ userId: user.id }, config.jwtSecret), user });
-  } catch (err) { res.status(400).json({ error: 'Username/Email exists' }); }
+  } catch (err) { res.status(400).json({ error: 'User exists' }); }
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
@@ -117,41 +99,45 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
   try {
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const { firstName, lastName, bio, socialLinks, birthDate, privacyProfile, privacyMessages, privacyPosts } = req.body;
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        firstName, lastName,
-        bio: encryptField(bio),
-        socialLinks, birthDate,
-        privacyProfile, privacyMessages, privacyPosts
+    
+    const fields = ['firstName', 'lastName', 'bio', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts', 'avatar'];
+    const data: any = {};
+    fields.forEach(f => {
+      if (req.body[f] !== undefined) {
+        data[f] = f === 'bio' ? encryptField(req.body[f]) : req.body[f];
       }
     });
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data
+    });
     res.json(updated);
-  } catch (e) { 
-    console.error(e);
-    res.status(500).json({ error: 'Update failed' }); 
-  }
+  } catch (e) { res.status(500).json({ error: 'Update failed' }); }
 });
 
 app.get('/api/users/:username', async (req: Request, res: Response) => {
   const viewer = await getUserFromReq(req);
   const { username } = req.params;
   const owner = await prisma.user.findUnique({ where: { username } });
-  if (!owner) return res.status(404).json({ error: 'User not found' });
+  if (!owner) return res.status(404).json({ error: 'Not found' });
+
   const followersCount = await prisma.follow.count({ where: { followingId: owner.id } });
   const followingCount = await prisma.follow.count({ where: { followerId: owner.id } });
+  
   let isFollowing = false;
   if (viewer) {
-    const follow = await prisma.follow.findUnique({
+    const f = await prisma.follow.findUnique({
       where: { followerId_followingId: { followerId: viewer.id, followingId: owner.id } }
     });
-    isFollowing = !!follow;
+    isFollowing = !!f;
   }
+
   const hasAccess = await canAccess(viewer?.id, owner, owner.privacyProfile);
   if (!hasAccess) {
     return res.json({ username: owner.username, avatar: owner.avatar, isRestricted: true, isFollowing, _count: { followers: followersCount, following: followingCount } });
   }
+
   res.json({ ...owner, bio: decryptField(owner.bio), isFollowing, _count: { followers: followersCount, following: followingCount }, email: undefined, password: undefined });
 });
 
@@ -159,31 +145,37 @@ app.post('/api/users/:userId/follow', async (req: Request, res: Response) => {
   const viewer = await getUserFromReq(req);
   if (!viewer) return res.status(401).json({ error: 'Unauthorized' });
   const { userId } = req.params;
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId: viewer.id, followingId: userId } }
-  });
-  if (existing) {
-    await prisma.follow.delete({ where: { followerId_followingId: { followerId: viewer.id, followingId: userId } } });
-    return res.json({ following: false });
-  } else {
-    await prisma.follow.create({ data: { followerId: viewer.id, followingId: userId } });
-    return res.json({ following: true });
-  }
+  
+  try {
+    const existing = await prisma.follow.findUnique({
+      where: { followerId_followingId: { followerId: viewer.id, followingId: userId } }
+    });
+
+    if (existing) {
+      await prisma.follow.delete({ where: { followerId_followingId: { followerId: viewer.id, followingId: userId } } });
+      return res.json({ following: false });
+    } else {
+      await prisma.follow.create({ data: { followerId: viewer.id, followingId: userId } });
+      return res.json({ following: true });
+    }
+  } catch (e) { res.status(500).json({ error: 'Follow operation failed' }); }
 });
 
 app.get('/api/posts', async (req: Request, res: Response) => {
   const viewer = await getUserFromReq(req);
   const { username } = req.query;
   let where: any = {};
+  
   if (username) {
     const owner = await prisma.user.findUnique({ where: { username: username as string } });
     if (!owner || !(await canAccess(viewer?.id, owner, owner.privacyPosts))) return res.json([]);
     where.authorId = owner.id;
   }
+
   const posts = await prisma.post.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
-    include: { author: { select: { username: true, firstName: true, lastName: true, avatar: true } }, _count: { select: { likes: true } } }
+    orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+    include: { author: { select: { username: true, firstName: true, avatar: true } }, _count: { select: { likes: true } } }
   });
   res.json(posts);
 });
@@ -191,10 +183,9 @@ app.get('/api/posts', async (req: Request, res: Response) => {
 app.post('/api/posts', async (req: Request, res: Response) => {
   const user = await getUserFromReq(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  const { content } = req.body;
   const post = await prisma.post.create({
-    data: { content, authorId: user.id },
-    include: { author: { select: { username: true, firstName: true, lastName: true, avatar: true } } }
+    data: { content: req.body.content, authorId: user.id },
+    include: { author: { select: { username: true, firstName: true, avatar: true } } }
   });
   res.json(post);
 });
