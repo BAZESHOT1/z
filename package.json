@@ -4,17 +4,12 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "dev": "docker-compose up -d && docker-compose logs -f",
-    "dev:backend": "docker-compose up -d postgres redis && cd backend && npm run dev",
-    "dev:frontend": "expo start --web",
-    "start": "docker-compose up -d",
-    "stop": "docker-compose down",
-    "restart": "docker-compose restart",
-    "logs": "docker-compose logs -f",
-    "clean": "docker-compose down -v && docker system prune -f",
-    "migrate": "docker-compose exec backend npx prisma migrate deploy",
-    "seed": "docker-compose exec backend npx prisma db seed",
-    "web": "expo start --web"
+    "dev": "expo start --web",
+    "start": "expo start",
+    "web": "expo start --web",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "dependencies": {
     "@react-navigation/native": "^7.1.6",
