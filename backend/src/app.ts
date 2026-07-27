@@ -27,7 +27,6 @@ async function getUserFromReq(req: Request) {
   }
 }
 
-// Helper: Check if two users are friends (mutual follows)
 async function areFriends(userId1: string, userId2: string) {
   const follow1 = await prisma.follow.findUnique({
     where: { followerId_followingId: { followerId: userId1, followingId: userId2 } }
@@ -104,12 +103,16 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
 app.get('/api/users/:username', async (req: Request, res: Response): Promise<any> => {
   const viewer = await getUserFromReq(req);
   const { username } = req.params;
+  
   const owner = await prisma.user.findUnique({
-    where: { username },
-    include: { _count: { select: { followers: true, following: true } } }
+    where: { username }
   });
 
   if (!owner) return res.status(404).json({ error: 'User not found' });
+
+  // Временно считаем фолловеров отдельно, чтобы не вызывать ошибку _count
+  const followersCount = await prisma.follow.count({ where: { followingId: owner.id } });
+  const followingCount = await prisma.follow.count({ where: { followerId: owner.id } });
 
   const hasAccess = await canAccess(viewer?.id, owner, owner.privacyProfile);
   
@@ -118,13 +121,14 @@ app.get('/api/users/:username', async (req: Request, res: Response): Promise<any
       username: owner.username,
       avatar: owner.avatar,
       isRestricted: true,
-      _count: owner._count
+      _count: { followers: followersCount, following: followingCount }
     });
   }
 
   res.json({
     ...owner,
     bio: decryptField(owner.bio),
+    _count: { followers: followersCount, following: followingCount },
     email: undefined, password: undefined
   });
 });
@@ -144,8 +148,18 @@ app.get('/api/posts', async (req: Request, res: Response) => {
 
   const posts = await prisma.post.findMany({
     where: whereClause,
-    orderBy: { createdAt: 'desc' }, // Удалено isPinned для стабильности
-    include: { author: true, _count: { select: { likes: true } } }
+    orderBy: { createdAt: 'desc' },
+    include: { 
+      author: {
+        select: {
+          id: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          avatar: true
+        }
+      }
+    }
   });
 
   res.json(posts);
