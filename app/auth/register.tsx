@@ -48,7 +48,7 @@ export default function RegisterScreen() {
         <Animated.View layout={Layout} style={styles.card}>
           <View style={styles.cardHeader}>
              <TouchableOpacity style={styles.iconBtn} onPress={() => step > 1 ? setStep(step-1) : router.back()}>
-               <ArrowLeft size={20} color="#8b949e" />
+               <ArrowLeft size={20} stroke="#8b949e" />
              </TouchableOpacity>
              <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
@@ -64,7 +64,7 @@ export default function RegisterScreen() {
                 
                 <View style={styles.inputWrapper}>
                   <View style={styles.field}>
-                    <User size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <User size={18} stroke="#8b949e" style={styles.fieldIcon} />
                     <TextInput 
                       style={[styles.input, available === false && styles.inputError]} 
                       placeholder="Напр. developer_z" 
@@ -90,7 +90,7 @@ export default function RegisterScreen() {
                 
                 <View style={styles.inputWrapper}>
                   <View style={styles.field}>
-                    <Mail size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <Mail size={18} stroke="#8b949e" style={styles.fieldIcon} />
                     <TextInput 
                       style={styles.input} 
                       placeholder="email@example.com" 
@@ -116,7 +116,7 @@ export default function RegisterScreen() {
                 
                 <View style={styles.inputWrapper}>
                   <View style={styles.field}>
-                    <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <Lock size={18} stroke="#8b949e" style={styles.fieldIcon} />
                     <TextInput 
                       style={styles.input} 
                       placeholder="Минимум 8 символов" 
@@ -126,12 +126,12 @@ export default function RegisterScreen() {
                       onChangeText={v => setForm({...form, password: v})}
                     />
                     <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                      {showPass ? <EyeOff size={18} color="#8b949e" /> : <Eye size={18} color="#8b949e" />}
+                      {showPass ? <EyeOff size={18} stroke="#8b949e" /> : <Eye size={18} stroke="#8b949e" />}
                     </TouchableOpacity>
                   </View>
                   
                   <View style={[styles.field, { marginTop: 12 }]}>
-                    <Lock size={18} color="#8b949e" style={styles.fieldIcon} />
+                    <Lock size={18} stroke="#8b949e" style={styles.fieldIcon} />
                     <TextInput 
                       style={styles.input} 
                       placeholder="Повторите пароль" 

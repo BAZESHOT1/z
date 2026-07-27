@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { Home, MessageSquare, LayoutGrid, User } from 'lucide-react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions, TouchableOpacity } from 'react-native';
+import { Home, MessageSquare, LayoutGrid, User, LogOut } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -51,10 +51,10 @@ export default function MainApp() {
   };
 
   const dockItems = [
-    { id: 'feed', icon: <Home size={20} color={activeTab === 'feed' ? '#fff' : '#7e8590'} />, label: t.home, onClick: () => handleTabPress('feed') },
-    { id: 'chats', icon: <MessageSquare size={20} color={activeTab === 'chats' ? '#fff' : '#7e8590'} />, label: t.chats, onClick: () => handleTabPress('chats') },
-    { id: 'apps', icon: <LayoutGrid size={20} color={activeTab === 'apps' ? '#fff' : '#7e8590'} />, label: t.apps, onClick: () => handleTabPress('apps') },
-    { id: 'profile', icon: <User size={20} color={activeTab === 'profile' ? '#fff' : '#7e8590'} />, label: t.profile, onClick: () => handleTabPress('profile') },
+    { id: 'feed', icon: <Home size={20} stroke={activeTab === 'feed' ? '#fff' : '#7e8590'} />, label: t.home, onClick: () => handleTabPress('feed') },
+    { id: 'chats', icon: <MessageSquare size={20} stroke={activeTab === 'chats' ? '#fff' : '#7e8590'} />, label: t.chats, onClick: () => handleTabPress('chats') },
+    { id: 'apps', icon: <LayoutGrid size={20} stroke={activeTab === 'apps' ? '#fff' : '#7e8590'} />, label: t.apps, onClick: () => handleTabPress('apps') },
+    { id: 'profile', icon: <User size={20} stroke={activeTab === 'profile' ? '#fff' : '#7e8590'} />, label: t.profile, onClick: () => handleTabPress('profile') },
   ];
 
   return (
@@ -65,7 +65,7 @@ export default function MainApp() {
         )}
 
         <View style={styles.content}>
-          <ScrollView style={styles.scroll} contentContainerStyle={!isDesktop && { paddingBottom: 100 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={!isDesktop ? { paddingBottom: 100 } : undefined}>
             {activeTab === 'feed' && (
               <Animated.View entering={FadeIn} style={styles.page}>
                 {loading ? <ActivityIndicator color="#5353ff" style={{ marginTop: 40 }} /> : 
@@ -87,7 +87,7 @@ export default function MainApp() {
 
             {activeTab === 'chats' && (
               <View style={styles.centerPage}>
-                <MessageSquare size={48} color="#30363d" />
+                <MessageSquare size={48} stroke="#30363d" />
                 <Text style={styles.emptyText}>У вас пока нет активных диалогов</Text>
               </View>
             )}
@@ -97,7 +97,7 @@ export default function MainApp() {
                 <Text style={styles.sectionTitle}>Доступные приложения</Text>
                 <View style={styles.appGrid}>
                    <View style={styles.appItem}>
-                      <View style={styles.appIcon}><LayoutGrid size={24} color="#fff" /></View>
+                      <View style={styles.appIcon}><LayoutGrid size={24} stroke="#fff" /></View>
                       <Text style={styles.appLabel}>{t.cluster}</Text>
                    </View>
                 </View>
@@ -110,7 +110,15 @@ export default function MainApp() {
                   <Image source={{ uri: user.avatar }} style={styles.largeAvatar} />
                   <Text style={styles.profileName}>{user.firstName}</Text>
                   <Text style={styles.profileHandle}>@{user.username}</Text>
-                  <TouchableOpacity style={styles.logoutBtn} onPress={async () => { await AsyncStorage.removeItem('auth_token'); setUser(null); router.replace('/auth/login'); }}>
+                  <TouchableOpacity 
+                    style={styles.logoutBtn} 
+                    onPress={async () => { 
+                      await AsyncStorage.removeItem('auth_token'); 
+                      setUser(null); 
+                      router.replace('/auth/login'); 
+                    }}
+                  >
+                    <LogOut size={18} stroke="#f85149" style={{ marginRight: 8 }} />
                     <Text style={styles.logoutText}>{t.signOut}</Text>
                   </TouchableOpacity>
                 </View>
@@ -151,6 +159,6 @@ const styles = StyleSheet.create({
   largeAvatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 20, borderWidth: 3, borderColor: '#5353ff' },
   profileName: { color: '#c9d1d9', fontSize: 26, fontWeight: '900' },
   profileHandle: { color: '#8b949e', fontSize: 16, marginBottom: 30 },
-  logoutBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#f85149' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#f85149' },
   logoutText: { color: '#f85149', fontWeight: '700' }
 });
