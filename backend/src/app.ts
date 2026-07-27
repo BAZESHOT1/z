@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import { config } from './config.js';
@@ -7,16 +7,27 @@ import { clusterService } from './services/clusterService.js';
 const app = express();
 export const prisma = new PrismaClient();
 
-// Безопасная настройка CORS для внешних локальных клиентов
-app.use(cors({
-  origin: (origin, callback) => {
-    // Разрешать все источники для разработки (включая localhost и сторонние веб-превью)
-    callback(null, true);
-  },
-  credentials: true,
-}));
+// Явная установка CORS заголовков для любых запросов и preflight (OPTIONS)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
 app.use(express.json());
+
+// Логирование входящих запросов для отладки
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} (Origin: ${req.headers.origin || 'N/A'})`);
+  next();
+});
 
 // Инициализация стандартного пользователя в БД при первом старте
 async function initDefaultUser() {
@@ -192,7 +203,6 @@ app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
   res.json({ status: 'ack' });
 });
 
-// Явно слушаем интерфейс 0.0.0.0
 app.listen(config.port, '0.0.0.0', async () => {
   await initDefaultUser();
   console.log(`[SocialNet Backend] Сервер запущен на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
