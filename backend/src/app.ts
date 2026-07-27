@@ -13,23 +13,10 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Webhook for Auto-Deploy
-app.post('/api/webhooks/deploy', (req: Request, res: Response) => {
-  const signature = req.headers['x-hub-signature-256'];
-  const secret = config.jwtSecret;
-
-  if (!signature) return res.status(401).send('No signature');
-
-  const hmac = crypto.createHmac('sha256', secret);
-  const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
-
-  if (signature !== digest) return res.status(401).send('Invalid signature');
-
-  console.log('[Deploy] Starting git pull...');
-  exec('git pull', (err, stdout) => {
-    if (err) return res.status(500).send(err.message);
-    res.status(200).send('Deployed');
-  });
+// Логирование запросов для отладки
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
 });
 
 async function getUserFromReq(req: Request) {
@@ -46,13 +33,8 @@ async function areFriends(userId1: string, userId2: string) {
   try {
     const p = prisma as any;
     if (!p.follow) return false;
-    
-    const f1 = await p.follow.findUnique({
-      where: { followerId_followingId: { followerId: userId1, followingId: userId2 } }
-    });
-    const f2 = await p.follow.findUnique({
-      where: { followerId_followingId: { followerId: userId2, followingId: userId1 } }
-    });
+    const f1 = await p.follow.findUnique({ where: { followerId_followingId: { followerId: userId1, followingId: userId2 } } });
+    const f2 = await p.follow.findUnique({ where: { followerId_followingId: { followerId: userId2, followingId: userId1 } } });
     return !!f1 && !!f2;
   } catch (e) { return false; }
 }
@@ -68,16 +50,11 @@ async function canAccess(viewerId: string | undefined, owner: any, privacyField:
   return false;
 }
 
-// Routes
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
     const { username, password, email } = req.body;
     const user = await prisma.user.create({
-      data: {
-        username,
-        email: email ? encryptField(email) : null,
-        password: hashPassword(password),
-      },
+      data: { username, email: email ? encryptField(email) : null, password: hashPassword(password) },
     });
     res.status(201).json({ token: jwt.sign({ userId: user.id }, config.jwtSecret), user });
   } catch (err) { res.status(400).json({ error: 'User exists' }); }
@@ -86,9 +63,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   const { username, password } = req.body;
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !verifyPassword(password, user.password)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
+  if (!user || !verifyPassword(password, user.password)) return res.status(401).json({ error: 'Invalid' });
   res.json({ token: jwt.sign({ userId: user.id }, config.jwtSecret), user });
 });
 
@@ -103,45 +78,33 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
     const user = await getUserFromReq(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     
-    // Динамически определяем, какие поля поддерживает текущий клиент Prisma
-    const data: any = {};
     const body = req.body;
+    const updateData: any = {};
+    const fields = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
     
-    const possibleFields = ['firstName', 'lastName', 'bio', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts', 'avatar'];
-    
-    // Пытаемся понять, какие поля клиент "видит"
-    possibleFields.forEach(f => {
-      if (body[f] !== undefined && body[f] !== null) {
-        // Пропускаем поля приватности, если клиент на них ругается (временно)
-        if (f.startsWith('privacy')) {
-           // Если в логах были ошибки, можно добавить доп. проверку здесь
-        }
-        data[f] = f === 'bio' ? encryptField(body[f]) : body[f];
+    fields.forEach(f => {
+      if (body[f] !== undefined) {
+        updateData[f] = f === 'bio' ? encryptField(body[f]) : body[f];
       }
     });
 
     try {
-      const updated = await prisma.user.update({
-        where: { id: user.id },
-        data
-      });
+      const updated = await prisma.user.update({ where: { id: user.id }, data: updateData });
       res.json(updated);
-    } catch (updateErr: any) {
-      console.error('Update Profile Error:', updateErr.message);
-      // Если ошибка в "Unknown argument", пробуем обновить без полей приватности
-      if (updateErr.message.includes('Unknown argument')) {
-        const safeData: any = { ...data };
-        delete safeData.privacyProfile;
-        delete safeData.privacyMessages;
-        delete safeData.privacyPosts;
+    } catch (err: any) {
+      console.error('Update Profile Error:', err.message);
+      // Если Prisma ругается на неизвестное поле, пробуем сохранить только базовые поля
+      if (err.message.includes('Unknown argument')) {
+        const safeData: any = {};
+        ['firstName', 'lastName', 'avatar', 'bio'].forEach(f => {
+          if (body[f] !== undefined) safeData[f] = f === 'bio' ? encryptField(body[f]) : body[f];
+        });
         const updated = await prisma.user.update({ where: { id: user.id }, data: safeData });
-        return res.json(updated);
+        return res.json({ ...updated, _warning: 'Privacy settings ignored due to sync issue. Please Rebuild.' });
       }
-      throw updateErr;
+      throw err;
     }
-  } catch (e: any) { 
-    res.status(500).json({ error: 'Update failed', details: e.message }); 
-  }
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/users/:username', async (req: Request, res: Response) => {
@@ -151,64 +114,46 @@ app.get('/api/users/:username', async (req: Request, res: Response) => {
     const owner = await prisma.user.findUnique({ where: { username } });
     if (!owner) return res.status(404).json({ error: 'Not found' });
 
-    let followersCount = 0;
-    let followingCount = 0;
+    let stats = { followers: 0, following: 0 };
     let isFollowing = false;
-
     const p = prisma as any;
+
     if (p.follow) {
       try {
-        followersCount = await p.follow.count({ where: { followingId: owner.id } });
-        followingCount = await p.follow.count({ where: { followerId: owner.id } });
+        stats.followers = await p.follow.count({ where: { followingId: owner.id } });
+        stats.following = await p.follow.count({ where: { followerId: owner.id } });
         if (viewer) {
-          const f = await p.follow.findUnique({
-            where: { followerId_followingId: { followerId: viewer.id, followingId: owner.id } }
-          });
+          const f = await p.follow.findUnique({ where: { followerId_followingId: { followerId: viewer.id, followingId: owner.id } } });
           isFollowing = !!f;
         }
-      } catch (e) { console.error('Stats error:', e); }
+      } catch (e) {}
     }
 
     const privacy = (owner as any).privacyProfile || 'EVERYONE';
-    const hasAccess = await canAccess(viewer?.id, owner, privacy);
+    const hasAccess = await canAccess(viewer?.id, owner, privacy as PrivacyLevel);
     
-    if (!hasAccess) {
-      return res.json({ username: owner.username, avatar: owner.avatar, isRestricted: true, isFollowing, _count: { followers: followersCount, following: followingCount } });
-    }
-
-    res.json({ 
-      ...owner, 
-      bio: decryptField(owner.bio), 
-      isFollowing, 
-      _count: { followers: followersCount, following: followingCount }, 
-      email: undefined, 
-      password: undefined 
-    });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message });
-  }
+    if (!hasAccess) return res.json({ username: owner.username, avatar: owner.avatar, isRestricted: true, isFollowing, _count: stats });
+    res.json({ ...owner, bio: decryptField(owner.bio), isFollowing, _count: stats, email: undefined, password: undefined });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/users/:userId/follow', async (req: Request, res: Response) => {
   const viewer = await getUserFromReq(req);
   if (!viewer) return res.status(401).json({ error: 'Unauthorized' });
-  const { userId } = req.params;
   const p = prisma as any;
   if (!p.follow) return res.status(503).json({ error: 'Follow system not ready' });
   
   try {
-    const existing = await p.follow.findUnique({
-      where: { followerId_followingId: { followerId: viewer.id, followingId: userId } }
-    });
-
+    const where = { followerId_followingId: { followerId: viewer.id, followingId: req.params.userId } };
+    const existing = await p.follow.findUnique({ where });
     if (existing) {
-      await p.follow.delete({ where: { followerId_followingId: { followerId: viewer.id, followingId: userId } } });
+      await p.follow.delete({ where });
       return res.json({ following: false });
     } else {
-      await p.follow.create({ data: { followerId: viewer.id, followingId: userId } });
+      await p.follow.create({ data: { followerId: viewer.id, followingId: req.params.userId } });
       return res.json({ following: true });
     }
-  } catch (e) { res.status(500).json({ error: 'Follow operation failed' }); }
+  } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
 app.get('/api/posts', async (req: Request, res: Response) => {
@@ -220,29 +165,17 @@ app.get('/api/posts', async (req: Request, res: Response) => {
     if (username) {
       const owner = await prisma.user.findUnique({ where: { username: username as string } });
       const privacy = (owner as any)?.privacyPosts || 'EVERYONE';
-      if (!owner || !(await canAccess(viewer?.id, owner, privacy))) return res.json([]);
+      if (!owner || !(await canAccess(viewer?.id, owner, privacy as PrivacyLevel))) return res.json([]);
       where.authorId = owner.id;
     }
 
-    // Пробуем сортировку по isPinned, если не выйдет - обычную
-    try {
-      const posts = await prisma.post.findMany({
-        where,
-        orderBy: [{ isPinned: 'desc' } as any, { createdAt: 'desc' }],
-        include: { author: { select: { username: true, firstName: true, avatar: true } }, _count: { select: { likes: true } } }
-      });
-      return res.json(posts);
-    } catch (e) {
-      const posts = await prisma.post.findMany({
-        where,
-        orderBy: [{ createdAt: 'desc' }],
-        include: { author: { select: { username: true, firstName: true, avatar: true } }, _count: { select: { likes: true } } }
-      });
-      return res.json(posts);
-    }
-  } catch (e: any) {
-    res.status(500).json({ error: e.message });
-  }
+    const posts = await prisma.post.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }],
+      include: { author: { select: { username: true, firstName: true, avatar: true } }, _count: { select: { likes: true } } }
+    });
+    res.json(posts);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/posts', async (req: Request, res: Response) => {
