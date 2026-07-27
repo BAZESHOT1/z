@@ -7,29 +7,25 @@ import { clusterService } from './services/clusterService.js';
 const app = express();
 export const prisma = new PrismaClient();
 
-// Явная установка CORS заголовков для любых запросов и preflight (OPTIONS)
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
+// Настройка CORS с помощью пакета cors
+app.use(
+  cors({
+    origin: true, // Разрешает текущий Origin запроса (например, http://localhost:32109)
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  })
+);
 
 app.use(express.json());
 
-// Логирование входящих запросов для отладки
+// Логирование входящих запросов в консоль Docker
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} (Origin: ${req.headers.origin || 'N/A'})`);
+  console.log(`[REQ] ${new Date().toISOString()} ${req.method} ${req.url} | Origin: ${req.headers.origin || 'N/A'}`);
   next();
 });
 
-// Инициализация стандартного пользователя в БД при первом старте
+// Инициализация дефолтного пользователя
 async function initDefaultUser() {
   try {
     const existingUser = await prisma.user.findFirst();
@@ -56,7 +52,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     nodeId: config.nodeId,
     isMaster: config.isMasterNode,
     timestamp: new Date().toISOString(),
-    env: config.nodeEnv
+    env: config.nodeEnv,
   });
 });
 
@@ -142,7 +138,7 @@ app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-// POST /api/posts/:id/like — Поставить/снять лайк в БД
+// POST /api/posts/:id/like — Лайк
 app.post('/api/posts/:id/like', async (req: Request, res: Response): Promise<any> => {
   try {
     const postId = req.params.id;
@@ -205,7 +201,7 @@ app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
 
 app.listen(config.port, '0.0.0.0', async () => {
   await initDefaultUser();
-  console.log(`[SocialNet Backend] Сервер запущен на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
+  console.log(`[SocialNet Backend] Сервер готов к запросам на 0.0.0.0:${config.port} (Node: ${config.nodeId})`);
 });
 
 export default app;
