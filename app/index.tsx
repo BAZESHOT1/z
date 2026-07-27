@@ -8,9 +8,12 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  TextInput,
+  Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://82.26.152.225:4000';
+import { fetchPosts, createPost, togglePostLike, fetchClusterNodes, API_URL } from './api';
 
 interface Post {
   id: string;
@@ -22,9 +25,8 @@ interface Post {
   content: string;
   image?: string;
   likes: number;
-  comments: number;
   isLiked: boolean;
-  timeAgo: string;
+  createdAt: string;
 }
 
 interface ClusterNodeInfo {
@@ -36,60 +38,84 @@ interface ClusterNodeInfo {
   dbSyncProgress: number;
 }
 
-const INITIAL_POSTS: Post[] = [
-  {
-    id: '1',
-    author: {
-      name: 'Алексей Смирнов',
-      username: 'alex_dev',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-    },
-    content: '🚀 Запустили ноду социальной сети на сервере 82.26.152.225:4000! База данных PostgreSQL работает на порту 5435.',
-    image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
-    likes: 42,
-    comments: 8,
-    isLiked: false,
-    timeAgo: '15 минут назад',
-  },
-];
-
 export default function SocialApp() {
   const [activeTab, setActiveTab] = useState<'feed' | 'cluster' | 'profile'>('feed');
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [nodes, setNodes] = useState<ClusterNodeInfo[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Состояние создания поста
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newContent, setNewContent] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const loadFeed = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await fetchPosts();
+      setPosts(data);
+    } catch (err: any) {
+      setErrorMsg('Не удалось подключиться к бэкенду БД (' + API_URL + ')');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadNodes = async () => {
+    try {
+      const data = await fetchClusterNodes();
+      setNodes(data.nodes || []);
+    } catch (err) {
+      setNodes([]);
+    }
+  };
 
   useEffect(() => {
-    // Загрузка состояния нод сети при переключении на вкладку кластера
-    if (activeTab === 'cluster') {
-      fetch(`${API_URL}/api/cluster/nodes`)
-        .then((res) => res.json())
-        .then((data) => {
-          setNodes(data.nodes || []);
-        })
-        .catch(() => {
-          // Заглушка если сервер подгружается
-          setNodes([
-            {
-              nodeId: 'zzz',
-              url: 'http://82.26.152.225:4000',
-              status: 'active',
-              isMaster: true,
-              lastSeen: new Date().toLocaleTimeString(),
-              dbSyncProgress: 100,
-            },
-          ]);
-        });
+    if (activeTab === 'feed') {
+      loadFeed();
+    } else if (activeTab === 'cluster') {
+      loadNodes();
     }
   }, [activeTab]);
 
-  const toggleLike = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId
-          ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
-          : p
-      )
-    );
+  const handleLike = async (postId: string) => {
+    try {
+      // Оптимистичное обновление
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+            : p
+        )
+      );
+      await togglePostLike(postId);
+    } catch (e) {
+      // Откатить назад в случае ошибки
+      loadFeed();
+    }
+  };
+
+  const handleCreatePost = async () => {
+    if (!newContent.trim()) {
+      Alert.alert('Ошибка', 'Введите текст поста');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      const created = await createPost(newContent, newImageUrl || undefined);
+      setPosts((prev) => [created, ...prev]);
+      setNewContent('');
+      setNewImageUrl('');
+      setIsModalOpen(false);
+    } catch (e: any) {
+      Alert.alert('Ошибка', 'Не удалось отправить пост в базу данных');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   return (
@@ -99,41 +125,68 @@ export default function SocialApp() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logoText}>SocialNet Mesh</Text>
-        <TouchableOpacity style={styles.createPostBtn}>
+        <TouchableOpacity style={styles.createPostBtn} onPress={() => setIsModalOpen(true)}>
           <Text style={styles.createPostBtnText}>+ Пост</Text>
         </TouchableOpacity>
       </View>
 
       {/* Feed Tab */}
       {activeTab === 'feed' && (
-        <ScrollView style={styles.feedScroll} showsVerticalScrollIndicator={false}>
-          {posts.map((post) => (
-            <View key={post.id} style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <Image source={{ uri: post.author.avatar }} style={styles.authorAvatar} />
-                <View style={styles.postHeaderInfo}>
-                  <Text style={styles.authorName}>{post.author.name}</Text>
-                  <Text style={styles.postTime}>@{post.author.username} • {post.timeAgo}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.postText}>{post.content}</Text>
-
-              {post.image && (
-                <Image source={{ uri: post.image }} style={styles.postImage} resizeMode="cover" />
-              )}
-
-              <View style={styles.postActions}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post.id)}>
-                  <Text style={styles.actionIcon}>{post.isLiked ? '❤️' : '🤍'}</Text>
-                  <Text style={[styles.actionText, post.isLiked && styles.likedText]}>
-                    {post.likes}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+        <View style={{ flex: 1 }}>
+          {loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text style={styles.loadingText}>Загрузка постов из PostgreSQL...</Text>
             </View>
-          ))}
-        </ScrollView>
+          ) : errorMsg ? (
+            <View style={styles.centerContainer}>
+              <Text style={styles.errorText}>{errorMsg}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadFeed}>
+                <Text style={styles.retryBtnText}>Повторить попытку</Text>
+              </TouchableOpacity>
+            </View>
+          ) : posts.length === 0 ? (
+            <View style={styles.centerContainer}>
+              <Text style={styles.emptyTitle}>В базе данных нет постов</Text>
+              <Text style={styles.emptySub}>Будьте первым, кто опубликует запись!</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => setIsModalOpen(true)}>
+                <Text style={styles.retryBtnText}>Написать пост</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView style={styles.feedScroll} showsVerticalScrollIndicator={false}>
+              {posts.map((post) => (
+                <View key={post.id} style={styles.postCard}>
+                  <View style={styles.postHeader}>
+                    <Image
+                      source={{ uri: post.author.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}
+                      style={styles.authorAvatar}
+                    />
+                    <View style={styles.postHeaderInfo}>
+                      <Text style={styles.authorName}>{post.author.name}</Text>
+                      <Text style={styles.postTime}>@{post.author.username} • {new Date(post.createdAt).toLocaleTimeString()}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.postText}>{post.content}</Text>
+
+                  {post.image && (
+                    <Image source={{ uri: post.image }} style={styles.postImage} resizeMode="cover" />
+                  )}
+
+                  <View style={styles.postActions}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(post.id)}>
+                      <Text style={styles.actionIcon}>{post.isLiked ? '❤️' : '🤍'}</Text>
+                      <Text style={[styles.actionText, post.isLiked && styles.likedText]}>
+                        {post.likes}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
       )}
 
       {/* Cluster Nodes Monitor Tab */}
@@ -141,7 +194,7 @@ export default function SocialApp() {
         <ScrollView style={styles.feedScroll} contentContainerStyle={{ padding: 16 }}>
           <Text style={styles.centerTitle}>🌐 Мониторинг Mesh-Сети Нод</Text>
           <Text style={styles.centerSub}>
-            Распределенная система синхронизации баз данных и медиа-контента.
+            Прямые данные о нодах из бэкенда и PostgreSQL.
           </Text>
 
           <View style={styles.clusterCard}>
@@ -156,20 +209,84 @@ export default function SocialApp() {
             Активные ноды в сети ({nodes.length}):
           </Text>
 
-          {nodes.map((node, index) => (
-            <View key={node.nodeId || index} style={styles.nodeItem}>
-              <View style={styles.nodeHeader}>
-                <Text style={styles.nodeIdText}>{node.nodeId}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: '#10b981' }]}>
-                  <Text style={styles.statusBadgeText}>{node.isMaster ? 'MASTER' : 'WORKER'}</Text>
+          {nodes.length === 0 ? (
+            <Text style={{ color: '#6b7280', marginTop: 8 }}>Ноды не зарегистрированы или бэкенд выключен.</Text>
+          ) : (
+            nodes.map((node, index) => (
+              <View key={node.nodeId || index} style={styles.nodeItem}>
+                <View style={styles.nodeHeader}>
+                  <Text style={styles.nodeIdText}>{node.nodeId}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: '#10b981' }]}>
+                    <Text style={styles.statusBadgeText}>{node.isMaster ? 'MASTER' : 'WORKER'}</Text>
+                  </View>
                 </View>
+                <Text style={styles.nodeSub}>Репликация БД: {node.dbSyncProgress}%</Text>
+                <Text style={styles.nodeSub}>Статус: {node.status.toUpperCase()}</Text>
+                <Text style={styles.nodeSub}>URL: {node.url}</Text>
               </View>
-              <Text style={styles.nodeSub}>Репликация БД: {node.dbSyncProgress}%</Text>
-              <Text style={styles.nodeSub}>Статус: {node.status.toUpperCase()}</Text>
-            </View>
-          ))}
+            ))
+          )}
         </ScrollView>
       )}
+
+      {/* Profile Tab */}
+      {activeTab === 'profile' && (
+        <View style={styles.centerContainer}>
+          <Image
+            source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200' }}
+            style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 12 }}
+          />
+          <Text style={styles.centerTitle}>Администратор Ноды</Text>
+          <Text style={styles.centerSub}>@master_admin</Text>
+        </View>
+      )}
+
+      {/* Modal Создания Поста */}
+      <Modal visible={isModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Создать новую запись</Text>
+
+            <TextInput
+              style={styles.textInput}
+              placeholder="Что у вас нового?"
+              multiline
+              numberOfLines={4}
+              value={newContent}
+              onChangeText={setNewContent}
+            />
+
+            <TextInput
+              style={styles.singleInput}
+              placeholder="Ссылка на изображение (необязательно)"
+              value={newImageUrl}
+              onChangeText={setNewImageUrl}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setIsModalOpen(false)}
+                disabled={isPublishing}
+              >
+                <Text style={styles.cancelBtnText}>Отмена</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.publishBtn}
+                onPress={handleCreatePost}
+                disabled={isPublishing}
+              >
+                {isPublishing ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.publishBtnText}>Опубликовать</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Bottom Navigation */}
       <View style={styles.navBar}>
@@ -225,6 +342,44 @@ const styles = StyleSheet.create({
   },
   feedScroll: {
     flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  errorText: {
+    color: '#ef4444',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  emptySub: {
+    color: '#6b7280',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  retryBtn: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryBtnText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   postCard: {
     backgroundColor: '#ffffff',
@@ -379,5 +534,67 @@ const styles = StyleSheet.create({
   navLabelActive: {
     color: '#6366f1',
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    color: '#1f2937',
+  },
+  textInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    textAlignVertical: 'top',
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  singleInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cancelBtnText: {
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  publishBtn: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  publishBtnText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
