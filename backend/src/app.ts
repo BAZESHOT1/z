@@ -3,7 +3,6 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { PrismaClient, PrivacyLevel } from '@prisma/client';
 import { config } from './config';
-import { clusterService } from './services/clusterService';
 import { hashPassword, verifyPassword, encryptField, decryptField } from './utils/crypto';
 
 const app = express();
@@ -126,7 +125,7 @@ app.get('/api/users/:username', async (req: Request, res: Response): Promise<any
   res.json({
     ...owner,
     bio: decryptField(owner.bio),
-    email: undefined, password: undefined // Never return sensitive
+    email: undefined, password: undefined
   });
 });
 
@@ -145,7 +144,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
 
   const posts = await prisma.post.findMany({
     where: whereClause,
-    orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+    orderBy: { createdAt: 'desc' }, // Удалено isPinned для стабильности
     include: { author: true, _count: { select: { likes: true } } }
   });
 

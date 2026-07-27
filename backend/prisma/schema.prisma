@@ -28,7 +28,6 @@ model User {
   socialLinks     String?
   birthDate       String?
   
-  // Privacy Settings
   privacyProfile  PrivacyLevel @default(EVERYONE)
   privacyMessages PrivacyLevel @default(EVERYONE)
   privacyPosts    PrivacyLevel @default(EVERYONE)
@@ -49,7 +48,6 @@ model Post {
   authorId  String
   likes     Like[]
   comments  Comment[]
-  isPinned  Boolean   @default(false)
   createdAt DateTime  @default(now())
 }
 

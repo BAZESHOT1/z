@@ -46,10 +46,17 @@ export default function MainApp() {
   };
 
   const handleTabPress = (tab: any) => {
-    if (tab === 'profile') {
-      if (!user) router.push('/auth/login');
-      else router.push(`/profile/${user.username}`);
-      return;
+    // Проверка авторизации для профиля и чатов
+    if (tab === 'profile' || tab === 'chats') {
+      if (!user) {
+        router.push('/auth/login');
+        return;
+      }
+      
+      if (tab === 'profile') {
+        router.push(`/profile/${user.username}`);
+        return;
+      }
     }
     setActiveTab(tab);
   };
@@ -104,7 +111,13 @@ export default function MainApp() {
                 }
               </Animated.View>
             )}
-            {/* Other tabs remain simple for this example */}
+            
+            {activeTab === 'chats' && (
+              <View style={styles.page}>
+                 <Text style={styles.feedTitle}>{t.chats}</Text>
+                 <Text style={{color: '#8b949e', marginTop: 20}}>У вас пока нет активных диалогов.</Text>
+              </View>
+            )}
           </ScrollView>
           {!isDesktop && <Dock items={dockItems} activeTab={activeTab} />}
         </View>
