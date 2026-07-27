@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -8,54 +7,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  user
-  root
-  admin
-  moderator
-  tester
-  helper
-}
-
 model User {
-  id          String   @id @default(uuid())
-  username    String   @unique
-  password    String
-  firstName   String
-  lastName    String?
-  role        String   @default("user")
-  status      String   @default("offline")
-  bio         String?
-  socialLinks String?
-  birthDate   String?
-  avatar      String?
-  lastSeen    DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  posts Post[]
-  likes Like[]
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String?  @unique
+  password     String
+  firstName    String?
+  lastName     String?
+  role         String   @default("user")
+  status       String   @default("offline")
+  bio          String?
+  socialLinks  String?
+  birthDate    String?
+  avatar       String?  @default("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200")
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  posts        Post[]
+  likes        Like[]
 }
 
 model Post {
   id        String   @id @default(uuid())
   content   String
   imageUrl  String?
+  author    User     @relation(fields: [authorId], references: [id])
   authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes     Like[]
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  likes Like[]
 }
 
 model Like {
-  id        String   @id @default(uuid())
-  postId    String
-  userId    String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id     String @id @default(uuid())
+  post   Post   @relation(fields: [postId], references: [id])
+  postId String
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
 
   @@unique([postId, userId])
 }
@@ -64,10 +51,9 @@ model ClusterNode {
   id             String   @id @default(uuid())
   nodeId         String   @unique
   url            String
-  status         String   @default("active")
+  status         String
   isMaster       Boolean  @default(false)
   lastSeen       DateTime @default(now())
-  dbSyncProgress Int      @default(100)
-  createdAt      DateTime @default(now())
+  dbSyncProgress Float    @default(0)
   updatedAt      DateTime @updatedAt
 }

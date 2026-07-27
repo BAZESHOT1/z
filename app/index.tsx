@@ -27,6 +27,8 @@ import {
   updateUserRole,
   setAuthToken,
   fetchCurrentUser,
+  checkUsername,
+  updateProfile,
 } from './api';
 
 const FONT_FAMILY = Platform.select({
@@ -41,9 +43,7 @@ export default function SocialApp() {
   const [activeTab, setActiveTab] = useState<'feed' | 'cluster' | 'profile'>('feed');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
-  const [nodes, setNodes] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const t = translations[lang];
 
@@ -54,13 +54,11 @@ export default function SocialApp() {
   // Auth State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authForm, setAuthForm] = useState({ username: '', password: '', firstName: '', lastName: '' });
+  const [regStep, setRegStep] = useState(1);
+  const [showPass, setShowPass] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [authForm, setAuthForm] = useState({ username: '', password: '', confirm: '', email: '' });
   const [authLoading, setAuthLoading] = useState(false);
-
-  // Post State
-  const [isPostModalOpen, setIsPostModalOpen] = useState(false);
-  const [newContent, setNewContent] = useState('');
-  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     initializeApp();
@@ -69,24 +67,13 @@ export default function SocialApp() {
   const initializeApp = async () => {
     const savedLang = await AsyncStorage.getItem('user_lang');
     if (savedLang) setLang(savedLang as Language);
-
     const token = await AsyncStorage.getItem('auth_token');
     if (token) {
       setAuthToken(token);
-      try {
-        const user = await fetchCurrentUser();
-        if (user) setCurrentUser(user);
-      } catch (e) {
-        await AsyncStorage.removeItem('auth_token');
-        setAuthToken(null);
-      }
+      const user = await fetchCurrentUser();
+      if (user) setCurrentUser(user);
     }
     loadFeed();
-  };
-
-  const changeLanguage = async (newLang: Language) => {
-    setLang(newLang);
-    await AsyncStorage.setItem('user_lang', newLang);
   };
 
   const loadFeed = async () => {
@@ -94,24 +81,29 @@ export default function SocialApp() {
     try {
       const data = await fetchPosts();
       setPosts(data);
-      setErrorMsg(null);
-    } catch (err) {
-      setErrorMsg(t.errorConnect);
-    } finally {
-      setLoading(false);
+    } catch (err) {} finally { setLoading(false); }
+  };
+
+  const handleUsernameCheck = async (val: string) => {
+    setAuthForm({ ...authForm, username: val });
+    if (val.length < 3) {
+      setUsernameAvailable(null);
+      return;
     }
+    const res = await checkUsername(val);
+    setUsernameAvailable(res.available);
   };
 
   const handleAuthSubmit = async () => {
-    if (!authForm.username || !authForm.password || (authMode === 'register' && !authForm.firstName)) {
-      Alert.alert('Error', 'Please fill required fields');
+    if (authMode === 'register' && authForm.password !== authForm.confirm) {
+      Alert.alert('Ошибка', 'Пароли не совпадают');
       return;
     }
     setAuthLoading(true);
     try {
       const res = authMode === 'login' 
         ? await loginUser({ username: authForm.username, password: authForm.password })
-        : await registerUser(authForm);
+        : await registerUser({ username: authForm.username, password: authForm.password, email: authForm.email });
       
       setAuthToken(res.token);
       await AsyncStorage.setItem('auth_token', res.token);
@@ -119,32 +111,8 @@ export default function SocialApp() {
       setIsAuthModalOpen(false);
       loadFeed();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Auth failed');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    setAuthToken(null);
-    await AsyncStorage.removeItem('auth_token');
-    setCurrentUser(null);
-  };
-
-  const handleCreatePost = async () => {
-    if (!currentUser) return setIsAuthModalOpen(true);
-    if (!newContent.trim()) return;
-    setIsPublishing(true);
-    try {
-      const created = await createPost(newContent);
-      setPosts((prev) => [created, ...prev]);
-      setNewContent('');
-      setIsPostModalOpen(false);
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    } finally {
-      setIsPublishing(false);
-    }
+      Alert.alert('Ошибка', e.message);
+    } finally { setAuthLoading(false); }
   };
 
   return (
@@ -159,27 +127,19 @@ export default function SocialApp() {
           </View>
           <Text style={[styles.brandTitle, { color: colors.text, fontFamily: FONT_FAMILY }]}>Z</Text>
         </View>
-        
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <TouchableOpacity style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             <Octicons name={theme === 'dark' ? 'sun' : 'moon'} size={14} color={colors.text} />
           </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.langBtn, { borderColor: colors.border }]} onPress={() => changeLanguage(lang === 'ru' ? 'en' : 'ru')}>
+          <TouchableOpacity style={[styles.langBtn, { borderColor: colors.border }]} onPress={() => setLang(lang === 'ru' ? 'en' : 'ru')}>
             <Text style={{ color: colors.text, fontSize: 10, fontWeight: '800' }}>{lang.toUpperCase()}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.createBtn, { backgroundColor: colors.success }]} onPress={() => setIsPostModalOpen(true)}>
-            <Octicons name="plus" size={14} color="#ffffff" style={{ marginRight: 4 }} />
-            <Text style={[styles.createBtnText, { fontFamily: FONT_FAMILY }]}>{t.newPost}</Text>
-          </TouchableOpacity>
-
           {currentUser ? (
             <TouchableOpacity onPress={() => setActiveTab('profile')}>
               <Image source={{ uri: currentUser.avatar }} style={styles.avatarMini} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={[styles.loginBtn, { borderColor: colors.border }]} onPress={() => setIsAuthModalOpen(true)}>
+            <TouchableOpacity style={[styles.loginBtn, { borderColor: colors.border }]} onPress={() => { setAuthMode('login'); setIsAuthModalOpen(true); }}>
               <Text style={[styles.loginBtnText, { color: colors.text, fontFamily: FONT_FAMILY }]}>{t.signIn}</Text>
             </TouchableOpacity>
           )}
@@ -188,112 +148,102 @@ export default function SocialApp() {
 
       <ScrollView style={{ flex: 1 }}>
         {activeTab === 'feed' && (
-          loading ? (
-            <View style={styles.center}>
-              <ActivityIndicator color={colors.accent} />
-              <Text style={{ color: colors.subtext, marginTop: 10 }}>{t.loading}</Text>
-            </View>
-          ) : errorMsg ? (
-            <View style={styles.center}>
-              <Text style={{ color: colors.accent, marginBottom: 10 }}>{errorMsg}</Text>
-              <TouchableOpacity onPress={loadFeed} style={[styles.retryBtn, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
-                <Text style={{ color: colors.text }}>{t.retry}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            posts.map((post) => (
-              <View key={post.id} style={[styles.card, { borderBottomColor: colors.border }]}>
-                <View style={styles.cardHeader}>
-                  <Image source={{ uri: post.author.avatar }} style={styles.authorImg} />
-                  <View>
-                    <Text style={{ color: colors.text, fontWeight: '700' }}>{post.author.name}</Text>
-                    <Text style={{ color: colors.subtext, fontSize: 12 }}>@{post.author.username}</Text>
-                  </View>
+          loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.accent} /> : 
+          posts.map((post) => (
+            <View key={post.id} style={[styles.card, { borderBottomColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <Image source={{ uri: post.author.avatar }} style={styles.authorImg} />
+                <View>
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>{post.author.name}</Text>
+                  <Text style={{ color: colors.subtext, fontSize: 12 }}>@{post.author.username}</Text>
                 </View>
-                <Text style={{ color: colors.text, marginTop: 8, lineHeight: 20 }}>{post.content}</Text>
               </View>
-            ))
-          )
+              <Text style={{ color: colors.text, marginTop: 8, lineHeight: 20 }}>{post.content}</Text>
+            </View>
+          ))
         )}
 
         {activeTab === 'cluster' && (
-          <View style={{ padding: 16 }}>
-            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>{t.cluster}</Text>
-            <Text style={{ color: colors.subtext, marginBottom: 20 }}>{t.realTimeStatus}</Text>
-            <View style={[styles.nodeBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
-              <Text style={{ color: colors.text, fontWeight: '700' }}>{t.centralNode}</Text>
-              <Text style={{ color: colors.success }}>{t.operational}</Text>
-            </View>
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            {currentUser && (currentUser.role === 'admin' || currentUser.role === 'root') ? (
+               <Text style={{ color: colors.text }}>System Nodes are active.</Text>
+            ) : (
+               <Text style={{ color: colors.accent }}>Access Restricted to Administrators.</Text>
+            )}
           </View>
         )}
 
-        {activeTab === 'profile' && (
-          <View style={{ padding: 16 }}>
-            {currentUser ? (
-              <>
-                <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center', marginBottom: 20 }}>
-                  <Image source={{ uri: currentUser.avatar }} style={styles.profileImg} />
-                  <View>
-                    <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{currentUser.firstName}</Text>
-                    <Text style={{ color: colors.subtext }}>@{currentUser.username}</Text>
-                  </View>
+        {activeTab === 'profile' && currentUser && (
+          <View style={{ padding: 20 }}>
+             <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+                <Image source={{ uri: currentUser.avatar }} style={styles.profileImg} />
+                <View>
+                  <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800' }}>{currentUser.firstName}</Text>
+                  <Text style={{ color: colors.subtext }}>@{currentUser.username}</Text>
                 </View>
-                <View style={[styles.nodeBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
-                  <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: '800' }}>{t.encryptedBio}</Text>
-                  <Text style={{ color: colors.text }}>{currentUser.bio || t.noBio}</Text>
-                </View>
-                <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { borderColor: colors.accent }]}>
-                  <Text style={{ color: colors.accent }}>{t.signOut}</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.center}>
-                <Text style={{ color: colors.text }}>{t.guestMode}</Text>
-                <TouchableOpacity onPress={() => setIsAuthModalOpen(true)} style={[styles.retryBtn, { backgroundColor: colors.success }]}>
-                  <Text style={{ color: '#fff' }}>{t.signIn}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+             </View>
+             <TouchableOpacity style={[styles.logoutBtn, { borderColor: colors.accent, marginTop: 30 }]} onPress={() => { setAuthToken(null); setCurrentUser(null); AsyncStorage.removeItem('auth_token'); }}>
+               <Text style={{ color: colors.accent }}>{t.signOut}</Text>
+             </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
-      {/* Auth Modal */}
+      {/* Improved Linear Auth Modal */}
       <Modal visible={isAuthModalOpen} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={{ color: colors.text, fontWeight: '800' }}>{authMode === 'login' ? t.signIn : t.join}</Text>
+              <Text style={{ color: colors.text, fontWeight: '800' }}>{authMode === 'login' ? t.signIn : `${t.join} - Шаг ${regStep}/3`}</Text>
               <TouchableOpacity onPress={() => setIsAuthModalOpen(false)}><Octicons name="x" size={20} color={colors.subtext} /></TouchableOpacity>
             </View>
-            
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.username} placeholderTextColor={colors.subtext} value={authForm.username} onChangeText={v => setAuthForm({...authForm, username: v})} autoCapitalize="none" />
-            {authMode === 'register' && (
-              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.firstName} placeholderTextColor={colors.subtext} value={authForm.firstName} onChangeText={v => setAuthForm({...authForm, firstName: v})} />
-            )}
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.password} placeholderTextColor={colors.subtext} secureTextEntry value={authForm.password} onChangeText={v => setAuthForm({...authForm, password: v})} />
-            
-            <TouchableOpacity onPress={handleAuthSubmit} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
-              {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{authMode === 'login' ? t.signIn : t.createAccount}</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
-              <Text style={{ color: colors.accent, textAlign: 'center', marginTop: 15 }}>{authMode === 'login' ? t.newToZ : t.alreadyHaveAccount}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Post Modal */}
-      <Modal visible={isPostModalOpen} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
-             <View style={styles.modalHeader}>
-              <Text style={{ color: colors.text, fontWeight: '800' }}>{t.newPost}</Text>
-              <TouchableOpacity onPress={() => setIsPostModalOpen(false)}><Octicons name="x" size={20} color={colors.subtext} /></TouchableOpacity>
-            </View>
-            <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top', borderColor: colors.border, color: colors.text }]} multiline placeholder={t.whatIsOnYourMind} placeholderTextColor={colors.subtext} value={newContent} onChangeText={setNewContent} />
-            <TouchableOpacity onPress={handleCreatePost} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
-              {isPublishing ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{t.post}</Text>}
+            {authMode === 'login' ? (
+              <>
+                <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.username} placeholderTextColor={colors.subtext} value={authForm.username} onChangeText={v => setAuthForm({...authForm, username: v})} autoCapitalize="none" />
+                <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.password} placeholderTextColor={colors.subtext} secureTextEntry value={authForm.password} onChangeText={v => setAuthForm({...authForm, password: v})} />
+                <TouchableOpacity onPress={handleAuthSubmit} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
+                  {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{t.signIn}</Text>}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {regStep === 1 && (
+                  <View>
+                    <TextInput style={[styles.input, { borderColor: usernameAvailable === false ? '#f85149' : colors.border, color: colors.text }]} placeholder={t.username} placeholderTextColor={colors.subtext} value={authForm.username} onChangeText={handleUsernameCheck} autoCapitalize="none" />
+                    {usernameAvailable === false && <Text style={{ color: '#f85149', fontSize: 12, marginBottom: 10 }}>Этот логин уже занят</Text>}
+                    <TouchableOpacity disabled={!usernameAvailable} onPress={() => setRegStep(2)} style={[styles.submitBtn, { backgroundColor: usernameAvailable ? colors.accent : colors.subtext }]}>
+                      <Text style={{ color: '#fff', fontWeight: '800' }}>Далее</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {regStep === 2 && (
+                  <View>
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Электронная почта" keyboardType="email-address" placeholderTextColor={colors.subtext} value={authForm.email} onChangeText={v => setAuthForm({...authForm, email: v})} autoCapitalize="none" />
+                    <TouchableOpacity onPress={() => setRegStep(3)} style={[styles.submitBtn, { backgroundColor: colors.accent }]}>
+                      <Text style={{ color: '#fff', fontWeight: '800' }}>Далее</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {regStep === 3 && (
+                  <View>
+                    <View style={{ position: 'relative' }}>
+                      <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={t.password} placeholderTextColor={colors.subtext} secureTextEntry={!showPass} value={authForm.password} onChangeText={v => setAuthForm({...authForm, password: v})} />
+                      <TouchableOpacity style={{ position: 'absolute', right: 12, top: 12 }} onPress={() => setShowPass(!showPass)}>
+                        <Octicons name={showPass ? "eye-closed" : "eye"} size={16} color={colors.subtext} />
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Повторите пароль" placeholderTextColor={colors.subtext} secureTextEntry={!showPass} value={authForm.confirm} onChangeText={v => setAuthForm({...authForm, confirm: v})} />
+                    <TouchableOpacity onPress={handleAuthSubmit} style={[styles.submitBtn, { backgroundColor: colors.success }]}>
+                      {authLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>{t.createAccount}</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+            <TouchableOpacity onPress={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setRegStep(1); }}>
+              <Text style={{ color: colors.accent, textAlign: 'center', marginTop: 15 }}>{authMode === 'login' ? t.newToZ : t.alreadyHaveAccount}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -319,19 +269,14 @@ const styles = StyleSheet.create({
   brandTitle: { fontSize: 20, fontWeight: '900' },
   iconBtn: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   langBtn: { paddingHorizontal: 8, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  createBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 34, borderRadius: 8 },
-  createBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   loginBtn: { paddingHorizontal: 12, height: 34, borderRadius: 8, borderWidth: 1, justifyContent: 'center' },
   loginBtnText: { fontWeight: '700', fontSize: 13 },
   avatarMini: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#30363d' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  retryBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, borderWidth: 1 },
   card: { padding: 16, borderBottomWidth: 1 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   authorImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#30363d' },
-  nodeBox: { padding: 16, borderRadius: 8, borderWidth: 1, marginBottom: 16 },
   profileImg: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#30363d' },
-  logoutBtn: { height: 44, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
+  logoutBtn: { height: 44, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   modalBox: { borderRadius: 12, borderWidth: 1, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
