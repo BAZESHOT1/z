@@ -6,14 +6,11 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  TextInput,
-  Modal,
   SafeAreaView,
   StatusBar,
-  Dimensions,
 } from 'react-native';
 
-const API_URL = 'http://132.243.235.23:4000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://82.26.152.225:4000';
 
 interface Post {
   id: string;
@@ -47,7 +44,7 @@ const INITIAL_POSTS: Post[] = [
       username: 'alex_dev',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
     },
-    content: '🚀 Запустили ноду социальной сети на VPS 132.243.235.23:4000! База данных PostgreSQL работает на порту 5432.',
+    content: '🚀 Запустили ноду социальной сети на сервере 82.26.152.225:4000! База данных PostgreSQL работает на порту 5435.',
     image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
     likes: 42,
     comments: 8,
@@ -57,12 +54,9 @@ const INITIAL_POSTS: Post[] = [
 ];
 
 export default function SocialApp() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'search' | 'cluster' | 'profile'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'cluster' | 'profile'>('feed');
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newPostContent, setNewPostContent] = useState('');
   const [nodes, setNodes] = useState<ClusterNodeInfo[]>([]);
-  const [clusterInfo, setClusterInfo] = useState<any>(null);
 
   useEffect(() => {
     // Загрузка состояния нод сети при переключении на вкладку кластера
@@ -70,15 +64,14 @@ export default function SocialApp() {
       fetch(`${API_URL}/api/cluster/nodes`)
         .then((res) => res.json())
         .then((data) => {
-          setClusterInfo(data.currentNode);
           setNodes(data.nodes || []);
         })
         .catch(() => {
-          // Заглушка если сервер ещё подгружается
+          // Заглушка если сервер подгружается
           setNodes([
             {
-              nodeId: 'node-primary-vps-1',
-              url: 'http://132.243.235.23:4000',
+              nodeId: 'zzz',
+              url: 'http://82.26.152.225:4000',
               status: 'active',
               isMaster: true,
               lastSeen: new Date().toLocaleTimeString(),
@@ -106,7 +99,7 @@ export default function SocialApp() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logoText}>SocialNet Mesh</Text>
-        <TouchableOpacity style={styles.createPostBtn} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={styles.createPostBtn}>
           <Text style={styles.createPostBtnText}>+ Пост</Text>
         </TouchableOpacity>
       </View>
@@ -153,9 +146,10 @@ export default function SocialApp() {
 
           <View style={styles.clusterCard}>
             <Text style={styles.clusterCardTitle}>Центральный сервер (VPS)</Text>
-            <Text style={styles.clusterDetail}>IP: 132.243.235.23</Text>
+            <Text style={styles.clusterDetail}>IP: 82.26.152.225</Text>
             <Text style={styles.clusterDetail}>Порт API Бэкенда: 4000</Text>
-            <Text style={styles.clusterDetail}>Порт PostgreSQL DB: 5432</Text>
+            <Text style={styles.clusterDetail}>Порт PostgreSQL DB: 5435</Text>
+            <Text style={styles.clusterDetail}>Порт Redis: 6453</Text>
           </View>
 
           <Text style={{ fontSize: 16, fontWeight: '700', marginTop: 16, marginBottom: 8, color: '#111827' }}>
