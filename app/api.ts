@@ -43,35 +43,49 @@ export async function loginUser(data: any) {
 
 export async function fetchCurrentUser() {
   if (!authToken) return null;
-  const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
-  if (!res.ok) return null;
-  return await res.json();
+  try {
+    const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
 }
 
 export async function fetchUserProfile(username: string) {
-  const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
-  if (!res.ok) return null;
-  return await res.json();
+  try {
+    const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
 }
 
 export async function updateProfile(data: any) {
-  // Filter out system fields that Prisma update doesn't accept
+  // Тщательно фильтруем данные, чтобы не слать пустые строки там, где не надо
   const allowed = ['firstName', 'lastName', 'bio', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts', 'avatar'];
   const filtered: any = {};
-  allowed.forEach(k => { if (data[k] !== undefined) filtered[k] = data[k]; });
+  
+  allowed.forEach(k => { 
+    if (data[k] !== undefined && data[k] !== null) {
+      filtered[k] = data[k];
+    }
+  });
 
   const res = await fetch(`${API_URL}/api/auth/profile`, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify(filtered),
   });
-  return await res.json();
+  
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Update failed');
+  return json;
 }
 
 export async function fetchPosts(username?: string) {
   const url = username ? `${API_URL}/api/posts?username=${username}` : `${API_URL}/api/posts`;
-  const res = await fetch(url, { headers: getHeaders() });
-  return await res.json();
+  try {
+    const res = await fetch(url, { headers: getHeaders() });
+    return await res.json();
+  } catch (e) { return []; }
 }
 
 export async function createPost(content: string) {

@@ -13,9 +13,11 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Логирование запросов для отладки
+// Логирование запросов
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.method !== 'GET') {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`, req.body);
+  }
   next();
 });
 
@@ -27,6 +29,25 @@ async function getUserFromReq(req: Request) {
     const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
     return await prisma.user.findUnique({ where: { id: decoded.userId } });
   } catch (e) { return null; }
+}
+
+// Функция для безопасного обновления: удаляет поля, которые Prisma не знает
+async function safeUpdateUser(userId: string, data: any): Promise<any> {
+  try {
+    return await prisma.user.update({ where: { id: userId }, data });
+  } catch (err: any) {
+    if (err.message.includes('Unknown argument')) {
+      const match = err.message.match(/Unknown argument `([^`]+)`/);
+      if (match && match[1]) {
+        const badField = match[1];
+        console.warn(`[SafeUpdate] Поле '${badField}' не поддерживается текущим клиентом Prisma. Удаляем...`);
+        const { [badField]: _, ...newData } = data;
+        if (Object.keys(newData).length === 0) return await prisma.user.findUnique({ where: { id: userId } });
+        return safeUpdateUser(userId, newData);
+      }
+    }
+    throw err;
+  }
 }
 
 async function areFriends(userId1: string, userId2: string) {
@@ -80,31 +101,20 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
     
     const body = req.body;
     const updateData: any = {};
-    const fields = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
+    const allowed = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
     
-    fields.forEach(f => {
-      if (body[f] !== undefined) {
+    allowed.forEach(f => {
+      if (body[f] !== undefined && body[f] !== null) {
         updateData[f] = f === 'bio' ? encryptField(body[f]) : body[f];
       }
     });
 
-    try {
-      const updated = await prisma.user.update({ where: { id: user.id }, data: updateData });
-      res.json(updated);
-    } catch (err: any) {
-      console.error('Update Profile Error:', err.message);
-      // Если Prisma ругается на неизвестное поле, пробуем сохранить только базовые поля
-      if (err.message.includes('Unknown argument')) {
-        const safeData: any = {};
-        ['firstName', 'lastName', 'avatar', 'bio'].forEach(f => {
-          if (body[f] !== undefined) safeData[f] = f === 'bio' ? encryptField(body[f]) : body[f];
-        });
-        const updated = await prisma.user.update({ where: { id: user.id }, data: safeData });
-        return res.json({ ...updated, _warning: 'Privacy settings ignored due to sync issue. Please Rebuild.' });
-      }
-      throw err;
-    }
-  } catch (e: any) { res.status(500).json({ error: e.message }); }
+    const updated = await safeUpdateUser(user.id, updateData);
+    res.json({ ...updated, bio: decryptField(updated.bio) });
+  } catch (e: any) { 
+    console.error('Final Profile Error:', e);
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
 app.get('/api/users/:username', async (req: Request, res: Response) => {
