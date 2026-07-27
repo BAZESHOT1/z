@@ -7,7 +7,7 @@
     "db:push": "prisma db push",
     "generate": "prisma generate",
     "start": "prisma generate && prisma db push && node dist/app.js",
-    "dev": "prisma generate && ts-node-dev --respawn --transpile-only src/app.ts"
+    "dev": "prisma db push && prisma generate && ts-node-dev --respawn --transpile-only src/app.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
