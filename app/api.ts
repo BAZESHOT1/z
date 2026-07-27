@@ -1,5 +1,4 @@
-// Укажите IP вашего VPS вместо 'YOUR_VPS_IP' (например: 'http://194.87.1.2:3000')
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://YOUR_VPS_IP:3000';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://132.243.235.23:4000';
 
 export async function fetchPosts() {
   try {

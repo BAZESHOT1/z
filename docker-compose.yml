@@ -48,14 +48,14 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV}
       - PORT=3000
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:${REDIS_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
       - AI_API_KEYS=${AI_API_KEYS}
       - DEPLOYMENT_MODE=${DEPLOYMENT_MODE}
       - AUTO_MIGRATE=${AUTO_MIGRATE}
-      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:19000,http://frontend,http://localhost:8081
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     depends_on:
       postgres:
         condition: service_healthy
