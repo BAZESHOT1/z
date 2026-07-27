@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "db:push": "prisma db push",
-    "start": "prisma db push && node dist/app.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/app.ts"
+    "generate": "prisma generate",
+    "start": "prisma generate && prisma db push && node dist/app.js",
+    "dev": "prisma generate && ts-node-dev --respawn --transpile-only src/app.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
