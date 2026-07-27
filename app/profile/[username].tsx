@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, Edit3, MessageSquare, UserPlus, Grid, Image as ImageIcon, Calendar, Link as LinkIcon, Settings, Lock } from 'lucide-react-native';
+import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Calendar, Link as LinkIcon, Lock } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts } from '../api';
+import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow } from '../api';
 import { translations, Language } from '../i18n';
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 
 export default function ProfileScreen() {
   const { username } = useLocalSearchParams();
@@ -14,6 +15,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [lang, setLang] = useState<Language>('ru');
+  const [followingLoading, setFollowingLoading] = useState(false);
   
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', bio: '', socialLinks: '', birthDate: '' });
 
@@ -25,13 +27,13 @@ export default function ProfileScreen() {
   const loadData = async () => {
     const savedLang = await AsyncStorage.getItem('lang') as Language;
     if (savedLang) setLang(savedLang);
-
     try {
-      const profileData = await fetchUserProfile(username as string);
-      const currentData = await fetchCurrentUser();
+      const [profileData, currentData] = await Promise.all([
+        fetchUserProfile(username as string),
+        fetchCurrentUser()
+      ]);
       setUser(profileData);
       setCurrentUser(currentData);
-      
       if (profileData && !profileData.isRestricted) {
         const postsData = await fetchPosts(username as string);
         setPosts(postsData || []);
@@ -46,6 +48,15 @@ export default function ProfileScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
+  const handleFollow = async () => {
+    if (!currentUser) { router.push('/auth/login'); return; }
+    setFollowingLoading(true);
+    try {
+      const res = await toggleFollow(user.id || user._id);
+      setUser({ ...user, isFollowing: res.following, _count: { ...user._count, followers: user._count.followers + (res.following ? 1 : -1) } });
+    } catch (e) {} finally { setFollowingLoading(false); }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     await updateProfile(editForm);
@@ -54,7 +65,6 @@ export default function ProfileScreen() {
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>;
-  if (!user) return <View style={styles.center}><Text style={{color: '#fff'}}>User not found</Text></View>;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -63,61 +73,53 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>@{user.username}</Text>
         {isOwnProfile ? (
           <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}><Settings color="#fff" size={24} /></TouchableOpacity>
-        ) : <View style={{width: 40}} />}
+        ) : <View style={{ width: 40 }} />}
       </View>
 
-      <ScrollView>
-        <View style={styles.profileHeader}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Animated.View entering={FadeIn} style={styles.profileHeader}>
           <Image source={{ uri: user.avatar || 'https://via.placeholder.com/150' }} style={styles.avatar} />
           
-          {user.isRestricted ? (
-            <View style={styles.restrictedArea}>
-              <Lock color="#8b949e" size={48} />
-              <Text style={styles.restrictedText}>{t.restrictedProfile}</Text>
-              {!isOwnProfile && <TouchableOpacity style={styles.actionBtn}><UserPlus size={18} color="#fff" /><Text style={styles.btnText}>{t.follow}</Text></TouchableOpacity>}
-            </View>
-          ) : (
-            <>
-              {editing ? (
-                <View style={styles.editForm}>
-                  <TextInput style={styles.input} value={editForm.firstName} onChangeText={v => setEditForm({...editForm, firstName: v})} placeholder={t.firstName} placeholderTextColor="#8b949e" />
-                  <TextInput style={styles.input} value={editForm.lastName} onChangeText={v => setEditForm({...editForm, lastName: v})} placeholder={t.lastName} placeholderTextColor="#8b949e" />
-                  <TextInput style={[styles.input, { height: 80 }]} value={editForm.bio} onChangeText={v => setEditForm({...editForm, bio: v})} placeholder={t.bio} placeholderTextColor="#8b949e" multiline />
-                  <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={styles.btnText}>{t.save}</Text></TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
-                  <Text style={styles.bio}>{user.bio || 'No bio yet'}</Text>
-                  <View style={styles.stats}>
-                    <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.followers || 0}</Text><Text style={styles.statLabel}>{t.followers}</Text></View>
-                    <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.following || 0}</Text><Text style={styles.statLabel}>{t.following}</Text></View>
-                  </View>
-                  <View style={styles.actions}>
-                    {isOwnProfile ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}><Edit3 size={18} color="#fff" /><Text style={styles.btnText}>{t.editProfile}</Text></TouchableOpacity>
-                    ) : (
-                      <>
-                        <TouchableOpacity style={styles.actionBtn}><UserPlus size={18} color="#fff" /><Text style={styles.btnText}>{t.follow}</Text></TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionBtn, styles.msgBtn]}><MessageSquare size={18} color="#fff" /><Text style={styles.btnText}>{t.message}</Text></TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </>
-              )}
-            </>
-          )}
-        </View>
+          <Text style={styles.name}>{user.firstName || user.username} {user.lastName || ''}</Text>
+          <Text style={styles.bio}>{user.bio || 'Digital Nomad'}</Text>
+          
+          <View style={styles.stats}>
+            <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.followers || 0}</Text><Text style={styles.statLabel}>{t.followers}</Text></View>
+            <View style={styles.statItem}><Text style={styles.statNum}>{user._count?.following || 0}</Text><Text style={styles.statLabel}>{t.following}</Text></View>
+          </View>
+
+          <View style={styles.actions}>
+            {isOwnProfile ? (
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}><Edit3 size={18} color="#fff" /><Text style={styles.btnText}>{t.editProfile}</Text></TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, user.isFollowing && styles.followingBtn]} 
+                  onPress={handleFollow}
+                  disabled={followingLoading}
+                >
+                  {followingLoading ? <ActivityIndicator size="small" color="#fff" /> : 
+                    <>
+                      {user.isFollowing ? <UserMinus size={18} color="#fff" /> : <UserPlus size={18} color="#fff" />}
+                      <Text style={styles.btnText}>{user.isFollowing ? t.unfollow : t.follow}</Text>
+                    </>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.msgBtn]}><MessageCircle size={18} color="#fff" /><Text style={styles.btnText}>{t.message}</Text></TouchableOpacity>
+              </>
+            )}
+          </View>
+        </Animated.View>
 
         {!user.isRestricted && (
-          <>
-            <View style={styles.infoSection}>
-              {user.birthDate && <View style={styles.infoRow}><Calendar size={16} color="#8b949e" /><Text style={styles.infoText}>{user.birthDate}</Text></View>}
-              {user.socialLinks && <View style={styles.infoRow}><LinkIcon size={16} color="#8b949e" /><Text style={styles.infoText}>{user.socialLinks}</Text></View>}
-            </View>
-            <View style={styles.tabs}><TouchableOpacity style={styles.tabActive}><Text style={styles.tabText}>{t.posts}</Text></TouchableOpacity><TouchableOpacity style={styles.tab}><Text style={styles.tabText}>{t.media}</Text></TouchableOpacity></View>
-            <View style={styles.feed}>{posts.map(post => (<View key={post.id} style={styles.postCard}><Text style={styles.postContent}>{post.content}</Text></View>))}</View>
-          </>
+          <View style={styles.feedArea}>
+             <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.posts}</Text></View>
+             {posts.map((p, idx) => (
+                <Animated.View key={p.id} entering={SlideInDown.delay(idx * 100)} style={styles.postCard}>
+                  <Text style={styles.postContent}>{p.content}</Text>
+                </Animated.View>
+             ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -128,33 +130,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0d1117' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderColor: '#30363d' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   iconBtn: { padding: 8 },
-  profileHeader: { alignItems: 'center', padding: 24 },
-  avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 3, borderColor: '#5353ff' },
-  name: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  bio: { color: '#8b949e', textAlign: 'center', marginTop: 8, fontSize: 14, paddingHorizontal: 20 },
-  stats: { flexDirection: 'row', gap: 30, marginTop: 20 },
+  profileHeader: { alignItems: 'center', padding: 32, backgroundColor: '#161b22', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+  avatar: { width: 110, height: 110, borderRadius: 55, marginBottom: 16, borderWidth: 4, borderColor: '#5353ff' },
+  name: { color: '#fff', fontSize: 24, fontWeight: '900' },
+  bio: { color: '#8b949e', textAlign: 'center', marginTop: 8, fontSize: 15, paddingHorizontal: 40 },
+  stats: { flexDirection: 'row', gap: 40, marginTop: 24 },
   statItem: { alignItems: 'center' },
-  statNum: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  statLabel: { color: '#8b949e', fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 24, width: '100%' },
-  actionBtn: { flex: 1, backgroundColor: '#5353ff', flexDirection: 'row', height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  statNum: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  statLabel: { color: '#8b949e', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 32, width: '100%', maxWidth: 400 },
+  actionBtn: { flex: 1, backgroundColor: '#5353ff', flexDirection: 'row', height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  followingBtn: { backgroundColor: '#30363d' },
   msgBtn: { backgroundColor: '#21262d', borderWidth: 1, borderColor: '#30363d' },
-  btnText: { color: '#fff', fontWeight: '600' },
-  restrictedArea: { alignItems: 'center', gap: 16, marginTop: 20 },
-  restrictedText: { color: '#8b949e', fontSize: 16, fontWeight: '500', textAlign: 'center' },
-  infoSection: { paddingHorizontal: 24, gap: 10, marginBottom: 20 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  infoText: { color: '#8b949e', fontSize: 13 },
-  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#30363d' },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  tabActive: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderColor: '#5353ff' },
-  tabText: { color: '#fff', fontWeight: '600' },
-  feed: { padding: 16 },
-  postCard: { backgroundColor: '#161b22', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#30363d' },
-  postContent: { color: '#c9d1d9', lineHeight: 20 },
-  editForm: { width: '100%', gap: 12 },
-  input: { backgroundColor: '#0d1117', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#30363d' },
-  saveBtn: { backgroundColor: '#238636', height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  feedArea: { padding: 20 },
+  sectionHeader: { marginBottom: 16 },
+  sectionTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  postCard: { backgroundColor: '#161b22', padding: 20, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#30363d' },
+  postContent: { color: '#c9d1d9', lineHeight: 22, fontSize: 15 }
 });

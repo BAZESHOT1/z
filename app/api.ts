@@ -55,10 +55,15 @@ export async function fetchUserProfile(username: string) {
 }
 
 export async function updateProfile(data: any) {
+  // Filter out system fields that Prisma update doesn't accept
+  const allowed = ['firstName', 'lastName', 'bio', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts', 'avatar'];
+  const filtered: any = {};
+  allowed.forEach(k => { if (data[k] !== undefined) filtered[k] = data[k]; });
+
   const res = await fetch(`${API_URL}/api/auth/profile`, {
     method: 'PUT',
     headers: getHeaders(),
-    body: JSON.stringify(data),
+    body: JSON.stringify(filtered),
   });
   return await res.json();
 }
@@ -66,6 +71,15 @@ export async function updateProfile(data: any) {
 export async function fetchPosts(username?: string) {
   const url = username ? `${API_URL}/api/posts?username=${username}` : `${API_URL}/api/posts`;
   const res = await fetch(url, { headers: getHeaders() });
+  return await res.json();
+}
+
+export async function createPost(content: string) {
+  const res = await fetch(`${API_URL}/api/posts`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ content }),
+  });
   return await res.json();
 }
 
