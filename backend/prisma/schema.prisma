@@ -13,6 +13,9 @@ model User {
   username  String   @unique
   name      String
   avatar    String?
+  gender    String?  // Автоматическая колонка
+  bio       String?  // Автоматическая колонка
+  metadata  Json?    // Гибкое поле для хранения ЛЮБЫХ произвольных данных без изменения схемы
   createdAt DateTime @default(now())
   posts     Post[]
   likes     Like[]
@@ -24,6 +27,7 @@ model Post {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   content   String
   imageUrl  String?
+  metadata  Json?    // Произвольные доп. данные поста
   createdAt DateTime @default(now())
   likes     Like[]
 }

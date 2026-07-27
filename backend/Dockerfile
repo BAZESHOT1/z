@@ -2,7 +2,6 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Установка системных зависимостей для корректной работы Prisma Engine
 RUN apk add --no-cache openssl libc6-compat
 
 COPY package*.json ./
@@ -12,7 +11,6 @@ RUN npm install
 
 COPY . .
 
-# Генерация Prisma Client и компиляция TypeScript
 RUN npx prisma generate
 RUN npm run build
 
@@ -33,4 +31,5 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 3000
 
-CMD ["node", "dist/app.js"]
+# Автоматически синхронизирует колонки в PostgreSQL и запускает приложение
+CMD ["sh", "-c", "npx prisma db push && node dist/app.js"]
