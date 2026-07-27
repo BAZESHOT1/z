@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { config } from '../config.js';
+import { config } from '../config';
 
 // Вычисление 32-байтного ключа шифрования на основе JWT_SECRET
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(config.jwtSecret || 'default_secret').digest();

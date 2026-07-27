@@ -2,9 +2,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { config } from './config.js';
-import { clusterService } from './services/clusterService.js';
-import { hashPassword, verifyPassword, encryptField, decryptField } from './utils/crypto.js';
+import { config } from './config';
+import { clusterService } from './services/clusterService';
+import { hashPassword, verifyPassword, encryptField, decryptField } from './utils/crypto';
 
 const app = express();
 export const prisma = new PrismaClient();
