@@ -11,12 +11,6 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// Логирование запросов
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
-
 function generateToken(userId: string) {
   return jwt.sign({ userId }, config.jwtSecret, { expiresIn: '30d' });
 }
@@ -35,10 +29,10 @@ async function getUserFromReq(req: Request) {
 
 async function areFriends(userId1: string, userId2: string) {
   try {
-    const f1 = await (prisma as any).follow.findUnique({
+    const f1 = await prisma.follow.findUnique({
       where: { followerId_followingId: { followerId: userId1, followingId: userId2 } }
     });
-    const f2 = await (prisma as any).follow.findUnique({
+    const f2 = await prisma.follow.findUnique({
       where: { followerId_followingId: { followerId: userId2, followingId: userId1 } }
     });
     return !!f1 && !!f2;
@@ -127,12 +121,14 @@ app.get('/api/users/:username', async (req: Request, res: Response): Promise<any
     const owner = await prisma.user.findUnique({ where: { username } });
     if (!owner) return res.status(404).json({ error: 'User not found' });
 
-    // Безопасный подсчет статистики
     let followersCount = 0;
     let followingCount = 0;
     try {
-      followersCount = await (prisma as any).follow.count({ where: { followingId: owner.id } });
-      followingCount = await (prisma as any).follow.count({ where: { followerId: owner.id } });
+      // Использование prisma.follow напрямую (с проверкой на существование метода)
+      if (prisma.follow) {
+        followersCount = await prisma.follow.count({ where: { followingId: owner.id } });
+        followingCount = await prisma.follow.count({ where: { followerId: owner.id } });
+      }
     } catch (e) { console.log('Stats error:', e); }
 
     const hasAccess = await canAccess(viewer?.id, owner, owner.privacyProfile);
@@ -187,7 +183,6 @@ app.get('/api/posts', async (req: Request, res: Response) => {
   }
 });
 
-// Глобальный обработчик ошибок
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('[CRITICAL ERROR]', err);
   res.status(500).json({ error: 'Unexpected server error' });

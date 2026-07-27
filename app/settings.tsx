@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch, ActivityIndicator } from 'react-native';
-import { ArrowLeft, Globe, Lock, LogOut, Moon, Shield } from 'lucide-react-native';
+import { ArrowLeft, Globe, LogOut } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { translations, Language } from './i18n';
@@ -17,11 +17,16 @@ export default function SettingsScreen() {
   }, []);
 
   const loadSettings = async () => {
-    const savedLang = await AsyncStorage.getItem('lang') as Language;
-    if (savedLang) setLang(savedLang);
-    const data = await fetchCurrentUser();
-    setUser(data);
-    setLoading(false);
+    try {
+      const savedLang = await AsyncStorage.getItem('lang') as Language;
+      if (savedLang) setLang(savedLang);
+      const data = await fetchCurrentUser();
+      setUser(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleLanguage = async () => {
@@ -32,7 +37,8 @@ export default function SettingsScreen() {
 
   const cyclePrivacy = async (field: string) => {
     const levels = ['EVERYONE', 'FRIENDS', 'NOBODY'];
-    const currentIdx = levels.indexOf(user[field]);
+    const currentVal = user[field] || 'EVERYONE';
+    const currentIdx = levels.indexOf(currentVal);
     const nextLevel = levels[(currentIdx + 1) % levels.length];
     
     const updated = { ...user, [field]: nextLevel };
@@ -47,13 +53,20 @@ export default function SettingsScreen() {
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>;
+  if (!user) return <View style={styles.center}><Text style={{color: '#fff'}}>Error loading profile</Text></View>;
 
-  const PrivacyRow = ({ label, field }: { label: string, field: string }) => (
-    <TouchableOpacity style={styles.row} onPress={() => cyclePrivacy(field)}>
-      <Text style={styles.rowText}>{label}</Text>
-      <Text style={styles.valText}>{t[`privacy${user[field].charAt(0) + user[field].slice(1).toLowerCase()}` as keyof typeof t] || user[field]}</Text>
-    </TouchableOpacity>
-  );
+  const PrivacyRow = ({ label, field }: { label: string, field: string }) => {
+    const val = user[field] || 'EVERYONE';
+    const capitalizedVal = val.charAt(0) + val.slice(1).toLowerCase();
+    const translationKey = `privacy${capitalizedVal}` as keyof typeof t;
+    
+    return (
+      <TouchableOpacity style={styles.row} onPress={() => cyclePrivacy(field)}>
+        <Text style={styles.rowText}>{label}</Text>
+        <Text style={styles.valText}>{t[translationKey] || val}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
