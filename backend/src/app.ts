@@ -64,7 +64,7 @@ async function initDefaultUser() {
       console.log('[Database] Создан дефолтный пользователь master_admin (Role: root, Pass: admin123)');
     }
   } catch (err) {
-    console.error('[Database] Ошибка проверки пользователя:', err);
+    console.error('[Database] Ошибка проверки/создания дефолтного пользователя:', err);
   }
 }
 
@@ -180,6 +180,7 @@ app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> =>
       },
     });
   } catch (err) {
+    console.error('Ошибка входа:', err);
     return res.status(500).json({ error: 'Ошибка входа в систему' });
   }
 });
@@ -258,6 +259,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
 
     res.json(formattedPosts);
   } catch (error) {
+    console.error('Ошибка загрузки постов:', error);
     res.status(500).json({ error: 'Ошибка загрузки постов' });
   }
 });
@@ -300,6 +302,7 @@ app.post('/api/posts', async (req: Request, res: Response): Promise<any> => {
       createdAt: post.createdAt,
     });
   } catch (error) {
+    console.error('Ошибка создания поста:', error);
     return res.status(500).json({ error: 'Не удалось сохранить пост в БД' });
   }
 });
@@ -328,6 +331,7 @@ app.post('/api/posts/:id/like', async (req: Request, res: Response): Promise<any
     const likesCount = await prisma.like.count({ where: { postId } });
     return res.json({ likes: likesCount, isLiked: !existingLike });
   } catch (error) {
+    console.error('Ошибка постановки лайка:', error);
     return res.status(500).json({ error: 'Ошибка обновления лайка' });
   }
 });
