@@ -1,22 +1,27 @@
-FROM node:20-alpine
-
-# Устанавливаем необходимые системные зависимости для работы Prisma на Alpine
-RUN apk add --no-cache openssl libc6-compat
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-
-RUN npm install
-
 COPY prisma ./prisma/
 
-RUN npx prisma generate
+RUN npm install
 
 COPY . .
 
 RUN npm run build
 
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm install --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "dist/app.js"]
