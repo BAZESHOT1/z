@@ -1,16 +1,20 @@
 {
-  "name": "dyad-react-native-expo-template",
+  "name": "socialnet-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "dev": "expo start --clear",
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
-    "build:web": "expo export -p web",
-    "lint": "eslint ."
+    "dev": "docker-compose up -d && docker-compose logs -f",
+    "dev:backend": "docker-compose up -d postgres redis && cd backend && npm run dev",
+    "dev:frontend": "expo start --web",
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down",
+    "restart": "docker-compose restart",
+    "logs": "docker-compose logs -f",
+    "clean": "docker-compose down -v && docker system prune -f",
+    "migrate": "docker-compose exec backend npx prisma migrate deploy",
+    "seed": "docker-compose exec backend npx prisma db seed",
+    "web": "expo start --web"
   },
   "dependencies": {
     "@react-navigation/native": "^7.1.6",
