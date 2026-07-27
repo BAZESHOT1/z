@@ -43,9 +43,13 @@ export async function loginUser(data: any) {
 
 export async function fetchCurrentUser() {
   if (!authToken) return null;
-  const res = await fetch(`${API_URL}/api/auth/me`, {
-    headers: getHeaders(),
-  });
+  const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function fetchUserProfile(username: string) {
+  const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
   if (!res.ok) return null;
   return await res.json();
 }
@@ -56,54 +60,19 @@ export async function updateProfile(data: any) {
     headers: getHeaders(),
     body: JSON.stringify(data),
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Update failed');
-  return json;
+  return await res.json();
 }
 
-export async function updateUserRole(role: string) {
-  const res = await fetch(`${API_URL}/api/auth/role`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ role }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Permission error');
-  return json;
+export async function fetchPosts(username?: string) {
+  const url = username ? `${API_URL}/api/posts?username=${username}` : `${API_URL}/api/posts`;
+  const res = await fetch(url, { headers: getHeaders() });
+  return await res.json();
 }
 
-export async function fetchPosts() {
-  const response = await fetch(`${API_URL}/api/posts`, {
-    headers: getHeaders(),
-  });
-  if (!response.ok) throw new Error('Could not load entries');
-  return await response.json();
-}
-
-export async function createPost(content: string, imageUrl?: string) {
-  const response = await fetch(`${API_URL}/api/posts`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ content, imageUrl }),
-  });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error || 'Entry could not be saved');
-  return json;
-}
-
-export async function togglePostLike(postId: string) {
-  const response = await fetch(`${API_URL}/api/posts/${postId}/like`, {
+export async function toggleFollow(userId: string) {
+  const res = await fetch(`${API_URL}/api/users/${userId}/follow`, {
     method: 'POST',
     headers: getHeaders(),
   });
-  if (!response.ok) throw new Error('Action failed');
-  return await response.json();
-}
-
-export async function fetchClusterNodes() {
-  const response = await fetch(`${API_URL}/api/cluster/nodes`, {
-    headers: getHeaders(),
-  });
-  if (!response.ok) throw new Error('Access denied');
-  return await response.json();
+  return await res.json();
 }
