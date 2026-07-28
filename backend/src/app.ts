@@ -203,7 +203,6 @@ app.post('/api/admin/users/:id/role', authenticate, requireAdmin, async (req, re
   }
 });
 
-// Real Cluster Nodes & Server Stats Endpoint
 app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
   try {
     const usersCount = await prisma.user.count();
@@ -295,17 +294,23 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
     const isSelf = currentUserId === user.id;
 
     // Check DB Followers & Following count
-    const [followersCount, followingCount] = await Promise.all([
-      (prisma as any).follow.count({ where: { followingId: user.id } }),
-      (prisma as any).follow.count({ where: { followerId: user.id } })
-    ]);
+    let followersCount = 0;
+    let followingCount = 0;
+    try {
+      [followersCount, followingCount] = await Promise.all([
+        (prisma as any).follow.count({ where: { followingId: user.id } }),
+        (prisma as any).follow.count({ where: { followerId: user.id } })
+      ]);
+    } catch (e) {}
 
     let isFollowing = false;
     if (currentUserId && !isSelf) {
-      const followRecord = await (prisma as any).follow.findUnique({
-        where: { followerId_followingId: { followerId: currentUserId, followingId: user.id } }
-      });
-      isFollowing = !!followRecord;
+      try {
+        const followRecord = await (prisma as any).follow.findUnique({
+          where: { followerId_followingId: { followerId: currentUserId, followingId: user.id } }
+        });
+        isFollowing = !!followRecord;
+      } catch (e) {}
     }
 
     // Check Privacy Access
@@ -445,6 +450,56 @@ app.post('/api/users/update', authenticate, async (req: any, res) => {
   }
 });
 
+// Helper for fetching safe likes & comments count
+async function enrichPostsWithStats(posts: any[], currentUser: any) {
+  const postIds = posts.map(p => p.id);
+  if (postIds.length === 0) return [];
+
+  const likesMap: Record<number, number> = {};
+  const commentsMap: Record<number, number> = {};
+  const userLikedSet = new Set<number>();
+
+  try {
+    const likes = await (prisma as any).like.findMany({
+      where: { postId: { in: postIds } },
+      select: { postId: true, userId: true }
+    });
+    for (const l of likes) {
+      likesMap[l.postId] = (likesMap[l.postId] || 0) + 1;
+      if (currentUser && l.userId === currentUser.id) {
+        userLikedSet.add(l.postId);
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const comments = await (prisma as any).comment.findMany({
+      where: { postId: { in: postIds } },
+      select: { postId: true }
+    });
+    for (const c of comments) {
+      commentsMap[c.postId] = (commentsMap[c.postId] || 0) + 1;
+    }
+  } catch (e) {}
+
+  return posts.map(p => ({
+    id: p.id,
+    content: p.content,
+    mediaUrl: p.mediaUrl,
+    viewsCount: p.viewsCount,
+    isEdited: p.isEdited,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    authorId: p.authorId,
+    author: p.author,
+    isLiked: userLikedSet.has(p.id),
+    _count: {
+      likes: likesMap[p.id] || 0,
+      comments: commentsMap[p.id] || 0
+    }
+  }));
+}
+
 // --- POSTS, LIKES, COMMENTS IN DATABASE ---
 app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
   try {
@@ -458,9 +513,7 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
     let posts = await prisma.post.findMany({
       where: filterUsername ? { author: { username: { equals: filterUsername, mode: 'insensitive' } } } : {},
       include: {
-        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        likes: { select: { userId: true } },
-        comments: { select: { id: true } }
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -470,22 +523,7 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
     const hasMore = posts.length > limit;
     if (hasMore) posts.pop();
 
-    const formatted = posts.map(p => ({
-      id: p.id,
-      content: p.content,
-      mediaUrl: p.mediaUrl,
-      viewsCount: p.viewsCount,
-      isEdited: p.isEdited,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-      authorId: p.authorId,
-      author: p.author,
-      isLiked: currentUser ? p.likes.some(l => l.userId === currentUser.id) : false,
-      _count: {
-        likes: p.likes.length,
-        comments: p.comments.length
-      }
-    }));
+    const formatted = await enrichPostsWithStats(posts, currentUser);
 
     res.json({ posts: formatted, hasMore, page, limit });
   } catch (e: any) {
@@ -500,27 +538,14 @@ app.get('/api/posts', async (req, res) => {
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: { equals: String(username), mode: 'insensitive' } } } : {},
       include: { 
-        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        likes: { select: { userId: true } },
-        comments: { select: { id: true } }
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
       },
       orderBy: { createdAt: 'desc' },
       take: 50
     });
 
-    res.json(posts.map(p => ({
-      id: p.id,
-      content: p.content,
-      mediaUrl: p.mediaUrl,
-      viewsCount: p.viewsCount,
-      isEdited: p.isEdited,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-      authorId: p.authorId,
-      author: p.author,
-      isLiked: false,
-      _count: { likes: p.likes.length, comments: p.comments.length }
-    })));
+    const formatted = await enrichPostsWithStats(posts, null);
+    res.json(formatted);
   } catch (e: any) {
     res.json([]);
   }
@@ -560,25 +585,12 @@ app.put('/api/posts/:id', authenticate, async (req: any, res) => {
         isEdited: true
       },
       include: { 
-        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        likes: { select: { userId: true } },
-        comments: { select: { id: true } }
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
       }
     });
 
-    res.json({
-      id: updated.id,
-      content: updated.content,
-      mediaUrl: updated.mediaUrl,
-      viewsCount: updated.viewsCount,
-      isEdited: updated.isEdited,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
-      authorId: updated.authorId,
-      author: updated.author,
-      isLiked: req.user ? updated.likes.some(l => l.userId === req.user.id) : false,
-      _count: { likes: updated.likes.length, comments: updated.comments.length }
-    });
+    const [formatted] = await enrichPostsWithStats([updated], req.user);
+    res.json(formatted);
   } catch (e: any) {
     res.status(500).json({ error: 'Ошибка редактирования поста' });
   }
