@@ -293,7 +293,7 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
     const currentUserId = req.user?.id;
     const isSelf = currentUserId === user.id;
 
-    // Check DB Followers & Following count
+    // Check DB Followers & Following count safely
     let followersCount = 0;
     let followingCount = 0;
     try {
@@ -450,7 +450,7 @@ app.post('/api/users/update', authenticate, async (req: any, res) => {
   }
 });
 
-// Helper for fetching safe likes & comments count
+// Helper for fetching safe likes & comments count without Prisma include relation errors
 async function enrichPostsWithStats(posts: any[], currentUser: any) {
   const postIds = posts.map(p => p.id);
   if (postIds.length === 0) return [];
