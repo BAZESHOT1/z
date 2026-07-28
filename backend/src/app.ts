@@ -218,7 +218,152 @@ app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// --- POSTS FULL CRUD & VIEWS ---
+// --- USERS & FOLLOWS ---
+app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
+  try {
+    const targetUsername = req.params.username;
+    
+    // Case-insensitive lookup
+    const user = await prisma.user.findFirst({
+      where: { username: { equals: targetUsername, mode: 'insensitive' } }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    let followersCount = 0;
+    let followingCount = 0;
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (following.toLowerCase() === targetUsername.toLowerCase()) followersCount++;
+      if (follower.toLowerCase() === targetUsername.toLowerCase()) followingCount++;
+    }
+
+    const isFollowing = req.user ? inMemoryFollows.has(`${req.user.username}:${targetUsername}`) : false;
+
+    res.json({ 
+      ...user, 
+      isFollowing,
+      _count: { posts: 0, followers: followersCount, following: followingCount } 
+    });
+  } catch (e) {
+    res.status(404).json({ error: 'Error fetching profile' });
+  }
+});
+
+// Safe profile update with fallback
+app.post('/api/users/update', authenticate, async (req: any, res) => {
+  try {
+    const updateData: Record<string, any> = {};
+
+    if (req.body.firstName !== undefined) updateData.firstName = req.body.firstName || null;
+    if (req.body.lastName !== undefined) updateData.lastName = req.body.lastName || null;
+    if (req.body.bio !== undefined) updateData.bio = req.body.bio || null;
+    if (req.body.avatar !== undefined) updateData.avatar = req.body.avatar || null;
+    if (req.body.socialLinks !== undefined) updateData.socialLinks = req.body.socialLinks || null;
+    if (req.body.birthDate !== undefined) updateData.birthDate = req.body.birthDate || null;
+    if (req.body.privacyProfile !== undefined) updateData.privacyProfile = req.body.privacyProfile;
+    if (req.body.privacyMessages !== undefined) updateData.privacyMessages = req.body.privacyMessages;
+    if (req.body.privacyPosts !== undefined) updateData.privacyPosts = req.body.privacyPosts;
+
+    let updatedUser;
+    try {
+      updatedUser = await prisma.user.update({
+        where: { id: req.user.id },
+        data: updateData
+      });
+    } catch (dbErr: any) {
+      console.warn('[User Update Warning]', dbErr.message);
+      // Fallback: update only standard core fields
+      const safeData: Record<string, any> = {};
+      if (req.body.firstName !== undefined) safeData.firstName = req.body.firstName;
+      if (req.body.lastName !== undefined) safeData.lastName = req.body.lastName;
+      if (req.body.bio !== undefined) safeData.bio = req.body.bio;
+      if (req.body.avatar !== undefined) safeData.avatar = req.body.avatar;
+
+      updatedUser = await prisma.user.update({
+        where: { id: req.user.id },
+        data: safeData
+      }).catch(() => req.user);
+    }
+
+    res.json(updatedUser || req.user);
+  } catch (e: any) {
+    console.error('Update profile error:', e.message);
+    res.status(400).json({ error: 'Update failed: ' + e.message });
+  }
+});
+
+app.post('/api/users/:username/follow', authenticate, async (req: any, res) => {
+  try {
+    const follower = req.user.username;
+    const target = req.params.username;
+
+    if (follower === target) {
+      return res.status(400).json({ error: 'Нельзя подписаться на самого себя' });
+    }
+
+    const key = `${follower}:${target}`;
+    let following = false;
+
+    if (inMemoryFollows.has(key)) {
+      inMemoryFollows.delete(key);
+      following = false;
+    } else {
+      inMemoryFollows.add(key);
+      following = true;
+    }
+
+    res.json({ following, username: target });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Follow operation failed' });
+  }
+});
+
+app.get('/api/users/:username/followers', async (req, res) => {
+  try {
+    const target = req.params.username;
+    const followerUsernames: string[] = [];
+
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (following === target) followerUsernames.push(follower);
+    }
+
+    const users = await prisma.user.findMany({
+      where: { username: { in: followerUsernames } },
+      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
+    });
+
+    res.json(users);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+app.get('/api/users/:username/following', async (req, res) => {
+  try {
+    const target = req.params.username;
+    const followingUsernames: string[] = [];
+
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (follower === target) followingUsernames.push(follower);
+    }
+
+    const users = await prisma.user.findMany({
+      where: { username: { in: followingUsernames } },
+      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
+    });
+
+    res.json(users);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+// --- POSTS CRUD & FEED ---
 app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
   try {
     const page = parseInt(req.query.page as string || '1');

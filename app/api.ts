@@ -9,7 +9,7 @@ export function setAuthToken(token: string | null) {
 export function getAvatarUrl(username?: string, customAvatar?: string | null) {
   if (customAvatar && customAvatar.length > 5) return customAvatar;
   const name = encodeURIComponent(username || 'Z');
-  return `https://ui-avatars.com/api/?name=${name}&background=5353ff&color=fff&size=200&font-size=0.4`;
+  return `https://ui-avatars.com/api/?name=${name}&background=2563eb&color=fff&size=200&font-size=0.4`;
 }
 
 async function request(path: string, options: RequestInit = {}) {
@@ -29,18 +29,17 @@ async function request(path: string, options: RequestInit = {}) {
     
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
-      throw new Error(error.error || 'Request failed');
+      throw new Error(error.error || `Request failed with status ${res.status}`);
     }
     
     return await res.json();
   } catch (e: any) {
-    console.error(`API Error [${path}]:`, e.message);
-    if (e.message?.includes('fetch')) throw new Error('Сервер временно недоступен');
+    console.warn(`API [${path}]:`, e.message);
     throw e;
   }
 }
 
-export const fetchCurrentUser = () => request('/api/auth/me');
+export const fetchCurrentUser = () => request('/api/auth/me').catch(() => null);
 export const loginUser = (data: any) => request('/api/auth/login', { method: 'POST', body: JSON.stringify(data) });
 export const registerUser = (data: any) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) });
 export const checkUsername = (username: string) => request(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
@@ -79,7 +78,9 @@ export const fetchComments = (postId: number) =>
 export const createComment = (postId: number, content: string) => 
   request(`/api/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
 
-export const fetchUserProfile = (username: string) => request(`/api/users/${encodeURIComponent(username)}`);
+// Safe user profile fetcher (returns null instead of throwing on 404)
+export const fetchUserProfile = (username: string) => 
+  request(`/api/users/${encodeURIComponent(username)}`).catch(() => null);
 
 export const updateProfile = (data: any) => 
   request('/api/users/update', { method: 'POST', body: JSON.stringify(data) });

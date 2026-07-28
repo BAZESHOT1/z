@@ -23,6 +23,7 @@ model User {
   privacyMessages String     @default("EVERYONE")
   privacyPosts    String     @default("EVERYONE")
   createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now()) @updatedAt
   posts           Post[]
   likes           Like[]
   comments        Comment[]

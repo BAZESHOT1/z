@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput, useWindowDimensions, Modal } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon } from 'lucide-react-native';
+import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon, AlertCircle } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow, setAuthToken, getAvatarUrl, fetchFollowers, fetchFollowing } from '../api';
 import { translations } from '../i18n';
@@ -39,6 +39,7 @@ export default function ProfileScreen() {
   useEffect(() => { loadData(); }, [username]);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const token = await AsyncStorage.getItem('auth_token');
       if (token) setAuthToken(token);
@@ -64,7 +65,11 @@ export default function ProfileScreen() {
           avatar: profileData.avatar || ''
         });
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFollow = async () => {
@@ -118,8 +123,22 @@ export default function ProfileScreen() {
     { id: 'profile', icon: <UserIcon size={20} color={isOwnProfile ? "#fff" : colors.textSecondary} />, label: t.profile, onClick: () => router.push(currentUser ? `/profile/${currentUser.username}` : '/auth/login') },
   ];
 
-  if (loading && !user) return <View style={[styles.center, { backgroundColor: colors.bg }]}><ActivityIndicator color={colors.primary} /></View>;
-  if (!user) return <View style={[styles.center, { backgroundColor: colors.bg }]}><Text style={{color: colors.text}}>User not found</Text></View>;
+  if (loading) return <View style={[styles.center, { backgroundColor: colors.bg }]}><ActivityIndicator color={colors.primary} size="large" /></View>;
+  
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+        <View style={styles.notFoundBox}>
+          <AlertCircle size={48} color={colors.textSecondary} />
+          <Text style={[styles.notFoundTitle, { color: colors.text }]}>Пользователь не найден</Text>
+          <Text style={[styles.notFoundSub, { color: colors.textSecondary }]}>Пользователь @{username} не существует или был удален</Text>
+          <TouchableOpacity style={[styles.backHomeBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/')}>
+            <Text style={styles.backHomeBtnText}>Вернуться на главную</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -200,7 +219,7 @@ export default function ProfileScreen() {
               ) : (
                 <>
                   <Text style={[styles.name, { color: colors.text }]}>{user.firstName || user.username} {user.lastName || ''}</Text>
-                  <Text style={[styles.bioText, { color: colors.textSecondary }]}>{user.bio || 'Z Network member'}</Text>
+                  <Text style={[styles.bioText, { color: colors.textSecondary }]}>{user.bio || 'Участник Z Network'}</Text>
                   
                   <View style={styles.stats}>
                     <TouchableOpacity style={styles.statItem} onPress={() => openListModal('followers')}>
@@ -311,5 +330,12 @@ const styles = StyleSheet.create({
   feedArea: { padding: 12 },
   sectionHeader: { marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
-  emptyText: { textAlign: 'center', marginVertical: 20, fontSize: 14 }
+  emptyText: { textAlign: 'center', marginVertical: 20, fontSize: 14 },
+  
+  // Not found screen
+  notFoundBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 12 },
+  notFoundTitle: { fontSize: 20, fontWeight: '800' },
+  notFoundSub: { fontSize: 14, textAlign: 'center' },
+  backHomeBtn: { paddingHorizontal: 20, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
+  backHomeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 }
 });
