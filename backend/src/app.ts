@@ -45,13 +45,18 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const user = await prisma.user.create({
-      data: { username, password: hashPassword(password), email, firstName: firstName || username, nodeId: config.nodeId }
+      data: { 
+        username, 
+        password: hashPassword(password), 
+        email, 
+        firstName: firstName || username 
+      }
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.status(201).json({ token, user });
   } catch (e: any) { 
     console.error('Register error:', e.message);
-    res.status(400).json({ error: 'Ошибка при регистрации' }); 
+    res.status(400).json({ error: 'Ошибка при регистрации: ' + e.message }); 
   }
 });
 
@@ -86,11 +91,32 @@ app.get('/api/auth/check-username', async (req, res) => {
   }
 });
 
+// --- USERS ---
+app.get('/api/users/:username', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: req.params.username }
+    });
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...user, _count: { posts: 0, followers: 0, following: 0 } });
+  } catch (e) {
+    res.status(500).json({ error: 'Error fetching profile' });
+  }
+});
+
+app.post('/api/users/update', authenticate, async (req: any, res) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.user.id }, data: req.body });
+    res.json(updated);
+  } catch (e) {
+    res.status(400).json({ error: 'Update failed' });
+  }
+});
+
 // --- POSTS ---
 app.get('/api/posts', async (req, res) => {
   const { username } = req.query;
   try {
-    // Безопасное получение постов с фоллбэком
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: String(username) } } : {},
       include: { 
@@ -100,7 +126,6 @@ app.get('/api/posts', async (req, res) => {
       take: 50
     });
     
-    // Форматируем структуру с дефолтными счетчиками
     const formatted = posts.map(p => ({
       ...p,
       _count: { likes: 0, comments: 0 }
