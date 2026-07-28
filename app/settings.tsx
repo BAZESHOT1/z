@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { ArrowLeft, Globe, LogOut } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -43,7 +43,11 @@ export default function SettingsScreen() {
     
     const updated = { ...user, [field]: nextLevel };
     setUser(updated);
-    await updateProfile(updated);
+    try {
+      await updateProfile(updated);
+    } catch (e) {
+      console.error('Privacy update error:', e);
+    }
   };
 
   const handleLogout = async () => {

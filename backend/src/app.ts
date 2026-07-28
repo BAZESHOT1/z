@@ -13,7 +13,10 @@ import { clusterService } from './services/clusterService';
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Хранилище фолбека для подписок если таблицы Follows нет в БД
+const inMemoryFollows = new Set<string>(); // "followerUsername:followingUsername"
 
 // --- MIDDLEWARE ---
 const authenticate = async (req: any, res: Response, next: NextFunction) => {
@@ -27,6 +30,18 @@ const authenticate = async (req: any, res: Response, next: NextFunction) => {
     req.user = user;
     next();
   } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
+};
+
+const optionalAuth = async (req: any, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, config.jwtSecret) as any;
+      req.user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    } catch (e) {}
+  }
+  next();
 };
 
 // --- AUTH ---
@@ -91,14 +106,54 @@ app.get('/api/auth/check-username', async (req, res) => {
   }
 });
 
-// --- USERS ---
-app.get('/api/users/:username', async (req, res) => {
+// --- MEDIA UPLOAD ---
+app.post('/api/upload', authenticate, (req, res) => {
   try {
+    const { file } = req.body;
+    if (!file) return res.status(400).json({ error: 'Файл не передать' });
+    
+    // Если это base64 data URL
+    if (file.startsWith('data:image')) {
+      const filename = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.png`;
+      const base64Data = file.replace(/^data:image\/\w+;base64,/, "");
+      const uploadPath = path.join(process.cwd(), 'uploads', filename);
+      fs.writeFileSync(uploadPath, base64Data, 'base64');
+      return res.json({ url: `${config.masterNodeUrl || 'http://82.26.152.225:4000'}/uploads/${filename}`, base64: file });
+    }
+
+    res.json({ url: file, base64: file });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Ошибка при сохранении изображения' });
+  }
+});
+
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// --- USERS & FOLLOWS ---
+app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
+  try {
+    const targetUsername = req.params.username;
     const user = await prisma.user.findUnique({
-      where: { username: req.params.username }
+      where: { username: targetUsername }
     });
     if (!user) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...user, _count: { posts: 0, followers: 0, following: 0 } });
+
+    // Считаем подписчиков и подписки
+    let followersCount = 0;
+    let followingCount = 0;
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (following === targetUsername) followersCount++;
+      if (follower === targetUsername) followingCount++;
+    }
+
+    const isFollowing = req.user ? inMemoryFollows.has(`${req.user.username}:${targetUsername}`) : false;
+
+    res.json({ 
+      ...user, 
+      isFollowing,
+      _count: { posts: 0, followers: followersCount, following: followingCount } 
+    });
   } catch (e) {
     res.status(500).json({ error: 'Error fetching profile' });
   }
@@ -106,10 +161,83 @@ app.get('/api/users/:username', async (req, res) => {
 
 app.post('/api/users/update', authenticate, async (req: any, res) => {
   try {
-    const updated = await prisma.user.update({ where: { id: req.user.id }, data: req.body });
+    const { firstName, lastName, bio, avatar, socialLinks } = req.body;
+    const updated = await prisma.user.update({ 
+      where: { id: req.user.id }, 
+      data: { firstName, lastName, bio, avatar, socialLinks } 
+    });
     res.json(updated);
-  } catch (e) {
+  } catch (e: any) {
+    console.error('Update profile error:', e.message);
     res.status(400).json({ error: 'Update failed' });
+  }
+});
+
+app.post('/api/users/:username/follow', authenticate, async (req: any, res) => {
+  try {
+    const follower = req.user.username;
+    const target = req.params.username;
+
+    if (follower === target) {
+      return res.status(400).json({ error: 'Нельзя подписаться на самого себя' });
+    }
+
+    const key = `${follower}:${target}`;
+    let following = false;
+
+    if (inMemoryFollows.has(key)) {
+      inMemoryFollows.delete(key);
+      following = false;
+    } else {
+      inMemoryFollows.add(key);
+      following = true;
+    }
+
+    res.json({ following, username: target });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Follow operation failed' });
+  }
+});
+
+app.get('/api/users/:username/followers', async (req, res) => {
+  try {
+    const target = req.params.username;
+    const followerUsernames: string[] = [];
+
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (following === target) followerUsernames.push(follower);
+    }
+
+    const users = await prisma.user.findMany({
+      where: { username: { in: followerUsernames } },
+      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
+    });
+
+    res.json(users);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+app.get('/api/users/:username/following', async (req, res) => {
+  try {
+    const target = req.params.username;
+    const followingUsernames: string[] = [];
+
+    for (const key of inMemoryFollows) {
+      const [follower, following] = key.split(':');
+      if (follower === target) followingUsernames.push(following);
+    }
+
+    const users = await prisma.user.findMany({
+      where: { username: { in: followingUsernames } },
+      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
+    });
+
+    res.json(users);
+  } catch (e) {
+    res.json([]);
   }
 });
 

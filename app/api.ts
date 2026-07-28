@@ -6,6 +6,12 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
+export function getAvatarUrl(username?: string, customAvatar?: string | null) {
+  if (customAvatar && customAvatar.length > 5) return customAvatar;
+  const name = encodeURIComponent(username || 'Z');
+  return `https://ui-avatars.com/api/?name=${name}&background=5353ff&color=fff&size=200&font-size=0.4`;
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -17,7 +23,7 @@ async function request(path: string, options: RequestInit = {}) {
     const res = await fetch(`${API_URL}${path}`, { ...options, headers });
     
     if (res.status === 401) {
-      authToken = null; // Сброс при неверном токене
+      authToken = null;
       return null;
     }
     
@@ -29,8 +35,7 @@ async function request(path: string, options: RequestInit = {}) {
     return await res.json();
   } catch (e: any) {
     console.error(`API Error [${path}]:`, e.message);
-    // Если произошел сброс соединения, возвращаем пустую структуру или выбрасываем понятную ошибку
-    if (e.message.includes('fetch')) throw new Error('Сервер временно недоступен');
+    if (e.message?.includes('fetch')) throw new Error('Сервер временно недоступен');
     throw e;
   }
 }
@@ -41,12 +46,27 @@ export const registerUser = (data: any) => request('/api/auth/register', { metho
 export const checkUsername = (username: string) => request(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
 
 export const fetchPosts = (username?: string) => 
-  request(`/api/posts${username ? `?username=${username}` : ''}`).then(res => res || []);
+  request(`/api/posts${username ? `?username=${encodeURIComponent(username)}` : ''}`).then(res => res || []);
 
-export const createPost = (content: string) => 
-  request('/api/posts', { method: 'POST', body: JSON.stringify({ content }) });
+export const createPost = (content: string, mediaUrl?: string) => 
+  request('/api/posts', { method: 'POST', body: JSON.stringify({ content, mediaUrl }) });
 
 export const toggleLike = (postId: number) => 
   request(`/api/posts/${postId}/like`, { method: 'POST' });
 
-export const fetchUserProfile = (username: string) => request(`/api/users/${username}`);
+export const fetchUserProfile = (username: string) => request(`/api/users/${encodeURIComponent(username)}`);
+
+export const updateProfile = (data: any) => 
+  request('/api/users/update', { method: 'POST', body: JSON.stringify(data) });
+
+export const toggleFollow = (usernameOrId: string) => 
+  request(`/api/users/${encodeURIComponent(usernameOrId)}/follow`, { method: 'POST' });
+
+export const fetchFollowers = (username: string) => 
+  request(`/api/users/${encodeURIComponent(username)}/followers`).then(res => res || []);
+
+export const fetchFollowing = (username: string) => 
+  request(`/api/users/${encodeURIComponent(username)}/following`).then(res => res || []);
+
+export const uploadMedia = (base64Data: string) => 
+  request('/api/upload', { method: 'POST', body: JSON.stringify({ file: base64Data }) });

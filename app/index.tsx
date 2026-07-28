@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions, TouchableOpacity, TextInput } from 'react-native';
-import { Home, MessageSquare, LayoutGrid, User, Settings, Globe, Send, Heart, Repeat } from 'lucide-react-native';
+import { Home, MessageSquare, LayoutGrid, User, Send, Heart, Repeat, Image as ImageIcon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
 
 import { translations, Language } from './i18n';
-import { fetchCurrentUser, fetchPosts, setAuthToken, createPost } from './api';
+import { fetchCurrentUser, fetchPosts, setAuthToken, createPost, getAvatarUrl } from './api';
 import Sidebar from '../components/Sidebar';
 import Dock from '../components/Dock';
 
@@ -19,6 +19,8 @@ export default function MainApp() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPost, setNewPost] = useState('');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [showMediaInput, setShowMediaInput] = useState(false);
   const [posting, setPosting] = useState(false);
 
   const t = translations[lang];
@@ -49,9 +51,11 @@ export default function MainApp() {
     if (!newPost.trim() || !user) return;
     setPosting(true);
     try {
-      const post = await createPost(newPost);
+      const post = await createPost(newPost, mediaUrl.trim() || undefined);
       setPosts([post, ...posts]);
       setNewPost('');
+      setMediaUrl('');
+      setShowMediaInput(false);
     } catch (e) {} finally { setPosting(false); }
   };
 
@@ -86,7 +90,7 @@ export default function MainApp() {
                 <Text style={styles.feedTitle}>{activeTab === 'feed' ? t.home : t.chats}</Text>
                 {user && (
                   <TouchableOpacity onPress={() => router.push('/settings')} style={styles.avatarMiniBtn}>
-                    <Image source={{ uri: user.avatar || 'https://via.placeholder.com/40' }} style={styles.miniAvatar} />
+                    <Image source={{ uri: getAvatarUrl(user.username, user.avatar) }} style={styles.miniAvatar} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -103,7 +107,25 @@ export default function MainApp() {
                         value={newPost}
                         onChangeText={setNewPost}
                       />
+
+                      {showMediaInput && (
+                        <TextInput
+                          style={styles.mediaInput}
+                          placeholder="Ссылка на картинку (https://...)"
+                          placeholderTextColor="#8b949e"
+                          value={mediaUrl}
+                          onChangeText={setMediaUrl}
+                        />
+                      )}
+
                       <View style={styles.createFooter}>
+                        <TouchableOpacity 
+                          style={styles.iconActionBtn} 
+                          onPress={() => setShowMediaInput(!showMediaInput)}
+                        >
+                          <ImageIcon size={20} color={showMediaInput ? '#5353ff' : '#8b949e'} />
+                        </TouchableOpacity>
+
                         <TouchableOpacity 
                           style={[styles.sendBtn, !newPost.trim() && styles.sendBtnDisabled]} 
                           onPress={handleCreatePost}
@@ -119,13 +141,19 @@ export default function MainApp() {
                     posts.map((p, idx) => (
                       <Animated.View key={p.id} entering={SlideInUp.delay(idx * 100)} style={styles.postCard}>
                         <TouchableOpacity onPress={() => router.push(`/profile/${p.author.username}`)} style={styles.postHeader}>
-                          <Image source={{ uri: p.author.avatar || 'https://via.placeholder.com/40' }} style={styles.postAvatar} />
+                          <Image source={{ uri: getAvatarUrl(p.author.username, p.author.avatar) }} style={styles.postAvatar} />
                           <View>
                             <Text style={styles.postAuthor}>{p.author.firstName || p.author.username}</Text>
                             <Text style={styles.postMeta}>@{p.author.username}</Text>
                           </View>
                         </TouchableOpacity>
+
                         <Text style={styles.postContent}>{p.content}</Text>
+
+                        {p.mediaUrl && (
+                          <Image source={{ uri: p.mediaUrl }} style={styles.postMediaImage} resizeMode="cover" />
+                        )}
+
                         <View style={styles.postActions}>
                           <TouchableOpacity style={styles.postAction}><Heart size={18} color="#8b949e" /><Text style={styles.actionCount}>{p._count?.likes || 0}</Text></TouchableOpacity>
                           <TouchableOpacity style={styles.postAction}><MessageSquare size={18} color="#8b949e" /></TouchableOpacity>
@@ -158,7 +186,9 @@ const styles = StyleSheet.create({
   miniAvatar: { width: 32, height: 32 },
   createCard: { backgroundColor: '#161b22', borderRadius: 20, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#30363d' },
   createInput: { color: '#fff', fontSize: 16, minHeight: 60, textAlignVertical: 'top' },
-  createFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 },
+  mediaInput: { color: '#fff', backgroundColor: '#0d1117', padding: 10, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#30363d', fontSize: 14 },
+  createFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+  iconActionBtn: { padding: 8 },
   sendBtn: { backgroundColor: '#5353ff', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   sendBtnDisabled: { opacity: 0.5 },
   postCard: { backgroundColor: '#161b22', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#30363d' },
@@ -167,6 +197,7 @@ const styles = StyleSheet.create({
   postAuthor: { color: '#fff', fontWeight: '800', fontSize: 16 },
   postMeta: { color: '#8b949e', fontSize: 13 },
   postContent: { color: '#e6edf3', lineHeight: 24, fontSize: 15 },
+  postMediaImage: { width: '100%', height: 220, borderRadius: 12, marginTop: 12 },
   postActions: { flexDirection: 'row', gap: 24, marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#30363d' },
   postAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   actionCount: { color: '#8b949e', fontSize: 14, fontWeight: '600' }
