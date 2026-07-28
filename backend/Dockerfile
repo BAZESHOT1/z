@@ -1,13 +1,12 @@
 FROM node:20-alpine
-RUN apk add --no-cache openssl libc6-compat gcompat
+RUN apk add --no-cache openssl libc6-compat gcompat git
 
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY prisma ./prisma/
-RUN npx prisma generate
 COPY . .
 
+# Генерируем клиент и пушим схему в БД перед стартом
 EXPOSE 3000
-# Мастер-нода сама пушит схему при старте
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "npx prisma generate && npx prisma db push && npm run dev"]

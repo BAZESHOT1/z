@@ -54,6 +54,6 @@ model ClusterNode {
   status    String   @default("active")
   lastSeen  DateTime @default(now())
   load      Json?
-  owner     String
+  owner     String?
   createdAt DateTime @default(now())
 }
