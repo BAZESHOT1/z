@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
@@ -24,6 +24,6 @@ async function sendHeartbeat() {
 
 setInterval(sendHeartbeat, 60000);
 
-app.get('/health', (req, res) => res.json({ status: 'Community Node Active' }));
+app.get('/health', (req: Request, res: Response) => res.json({ status: 'Community Node Active' }));
 
 app.listen(3000, '0.0.0.0', () => console.log('📦 Z-COMMUNITY running on port 3000'));

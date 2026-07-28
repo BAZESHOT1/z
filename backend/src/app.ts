@@ -1,4 +1,4 @@
-import express, { Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
@@ -89,7 +89,7 @@ async function isFriend(userId1: number, userId2: number): Promise<boolean> {
 }
 
 // --- AUTH & ROLES ---
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
     const { username, password, email, firstName } = req.body;
     if (!username || !password || !email) {
@@ -120,7 +120,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -138,9 +138,9 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.get('/api/auth/me', authenticate, (req: any, res) => res.json(req.user));
+app.get('/api/auth/me', authenticate, (req: any, res: Response) => res.json(req.user));
 
-app.post('/api/auth/become-admin', authenticate, async (req: any, res) => {
+app.post('/api/auth/become-admin', authenticate, async (req: any, res: Response) => {
   try {
     const updated = await prisma.user.update({
       where: { id: req.user.id },
@@ -152,7 +152,7 @@ app.post('/api/auth/become-admin', authenticate, async (req: any, res) => {
   }
 });
 
-app.get('/api/auth/check-username', async (req, res) => {
+app.get('/api/auth/check-username', async (req: Request, res: Response) => {
   try {
     const username = String(req.query.username || '');
     if (!username) return res.json({ available: false });
@@ -164,7 +164,7 @@ app.get('/api/auth/check-username', async (req, res) => {
 });
 
 // --- ADMIN & CLUSTER NODE MONITORING ---
-app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+app.get('/api/admin/users', authenticate, requireAdmin, async (req: any, res: Response) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -185,7 +185,7 @@ app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/users/:id/role', authenticate, requireAdmin, async (req, res) => {
+app.post('/api/admin/users/:id/role', authenticate, requireAdmin, async (req: any, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
     const { role } = req.body;
@@ -204,7 +204,7 @@ app.post('/api/admin/users/:id/role', authenticate, requireAdmin, async (req, re
   }
 });
 
-app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
+app.get('/api/admin/stats', authenticate, requireAdmin, async (req: any, res: Response) => {
   try {
     const usersCount = await prisma.user.count();
     const postsCount = await prisma.post.count();
@@ -264,7 +264,7 @@ app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
 });
 
 // --- PROFILE & FOLLOWS IN DATABASE ---
-app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
+app.get('/api/users/:username', optionalAuth, async (req: any, res: Response) => {
   try {
     const targetUsername = req.params.username;
     
@@ -353,7 +353,7 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
 });
 
 // Record unique profile view
-app.post('/api/users/:username/view', optionalAuth, async (req: any, res) => {
+app.post('/api/users/:username/view', optionalAuth, async (req: any, res: Response) => {
   try {
     const targetUsername = req.params.username;
     const viewerId = req.user?.id || null;
@@ -385,7 +385,7 @@ app.post('/api/users/:username/view', optionalAuth, async (req: any, res) => {
 });
 
 // Follow / Unfollow stored in Database
-app.post('/api/users/:username/follow', authenticate, async (req: any, res) => {
+app.post('/api/users/:username/follow', authenticate, async (req: any, res: Response) => {
   try {
     const followerId = req.user.id;
     const targetUsername = req.params.username;
@@ -420,7 +420,7 @@ app.post('/api/users/:username/follow', authenticate, async (req: any, res) => {
   }
 });
 
-app.get('/api/users/:username/followers', async (req, res) => {
+app.get('/api/users/:username/followers', async (req: Request, res: Response) => {
   try {
     const targetUser = await prisma.user.findFirst({
       where: { username: { equals: req.params.username, mode: 'insensitive' } }
@@ -440,7 +440,7 @@ app.get('/api/users/:username/followers', async (req, res) => {
   }
 });
 
-app.get('/api/users/:username/following', async (req, res) => {
+app.get('/api/users/:username/following', async (req: Request, res: Response) => {
   try {
     const targetUser = await prisma.user.findFirst({
       where: { username: { equals: req.params.username, mode: 'insensitive' } }
@@ -460,7 +460,7 @@ app.get('/api/users/:username/following', async (req, res) => {
   }
 });
 
-app.post('/api/users/update', authenticate, async (req: any, res) => {
+app.post('/api/users/update', authenticate, async (req: any, res: Response) => {
   try {
     const updateData: Record<string, any> = {};
 
@@ -547,7 +547,7 @@ async function enrichPostsWithStats(posts: any[], currentUser: any) {
 }
 
 // --- POSTS, LIKES, COMMENTS IN DATABASE ---
-app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
+app.get('/api/posts/feed', optionalAuth, async (req: any, res: Response) => {
   try {
     const page = parseInt(req.query.page as string || '1');
     const limit = parseInt(req.query.limit as string || '10');
@@ -578,7 +578,7 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
   }
 });
 
-app.get('/api/posts', async (req, res) => {
+app.get('/api/posts', async (req: Request, res: Response) => {
   const { username } = req.query;
   try {
     const posts = await prisma.post.findMany({
@@ -597,7 +597,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-app.post('/api/posts', authenticate, async (req: any, res) => {
+app.post('/api/posts', authenticate, async (req: any, res: Response) => {
   try {
     const post = await prisma.post.create({
       data: { 
@@ -613,7 +613,7 @@ app.post('/api/posts', authenticate, async (req: any, res) => {
   }
 });
 
-app.put('/api/posts/:id', authenticate, async (req: any, res) => {
+app.put('/api/posts/:id', authenticate, async (req: any, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const post = await prisma.post.findUnique({ where: { id: postId } });
@@ -642,7 +642,7 @@ app.put('/api/posts/:id', authenticate, async (req: any, res) => {
   }
 });
 
-app.delete('/api/posts/:id', authenticate, async (req: any, res) => {
+app.delete('/api/posts/:id', authenticate, async (req: any, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const post = await prisma.post.findUnique({ where: { id: postId } });
@@ -660,7 +660,7 @@ app.delete('/api/posts/:id', authenticate, async (req: any, res) => {
 });
 
 // Record unique post view
-app.post('/api/posts/:id/view', optionalAuth, async (req: any, res) => {
+app.post('/api/posts/:id/view', optionalAuth, async (req: any, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const userId = req.user?.id || null;
@@ -681,7 +681,7 @@ app.post('/api/posts/:id/view', optionalAuth, async (req: any, res) => {
 });
 
 // Like Toggle in PostgreSQL Database (Strict Auth Required)
-app.post('/api/posts/:id/like', authenticate, async (req: any, res) => {
+app.post('/api/posts/:id/like', authenticate, async (req: any, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const userId = req.user.id;
@@ -709,7 +709,7 @@ app.post('/api/posts/:id/like', authenticate, async (req: any, res) => {
 });
 
 // Comments in PostgreSQL Database
-app.get('/api/posts/:id/comments', async (req, res) => {
+app.get('/api/posts/:id/comments', async (req: Request, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const comments = await (prisma as any).comment.findMany({
@@ -726,7 +726,7 @@ app.get('/api/posts/:id/comments', async (req, res) => {
 });
 
 // Strict Auth Required for Comment
-app.post('/api/posts/:id/comments', authenticate, async (req: any, res) => {
+app.post('/api/posts/:id/comments', authenticate, async (req: any, res: Response) => {
   try {
     const postId = parseInt(req.params.id);
     const { content } = req.body;
@@ -750,7 +750,7 @@ app.post('/api/posts/:id/comments', authenticate, async (req: any, res) => {
 });
 
 // --- MEDIA & APPS ---
-app.get('/api/apps', async (req, res) => {
+app.get('/api/apps', async (req: Request, res: Response) => {
   try {
     const apps = await (prisma as any).miniApp.findMany({
       include: { author: { select: { username: true, firstName: true } } },
@@ -762,7 +762,7 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
-app.post('/api/apps', authenticate, async (req: any, res) => {
+app.post('/api/apps', authenticate, async (req: any, res: Response) => {
   try {
     const { title, description, url, icon } = req.body;
     if (!title || !url) return res.status(400).json({ error: 'Укажите название и URL сайта' });
@@ -783,7 +783,7 @@ app.post('/api/apps', authenticate, async (req: any, res) => {
   }
 });
 
-app.post('/api/upload', authenticate, (req, res) => {
+app.post('/api/upload', authenticate, (req: any, res: Response) => {
   try {
     const { file } = req.body;
     if (!file) return res.status(400).json({ error: 'Файл не передан' });
@@ -817,7 +817,7 @@ app.post('/api/upload', authenticate, (req, res) => {
   }
 });
 
-app.get('/bucket/:filename', (req, res) => {
+app.get('/bucket/:filename', (req: Request, res: Response) => {
   try {
     const filePath = path.join(BUCKET_DIR, req.params.filename);
     if (!fs.existsSync(filePath)) {

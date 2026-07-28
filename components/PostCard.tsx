@@ -21,8 +21,8 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
 
   const [currentPost, setCurrentPost] = useState(post);
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
-  const [likesCount, setLikesCount] = useState(post._count?.likes || 0);
-  const [viewsCount, setViewsCount] = useState(post.viewsCount || 0);
+  const [likesCount, setLikesCount] = useState<number>(post._count?.likes || 0);
+  const [viewsCount, setViewsCount] = useState<number>(post.viewsCount || 0);
 
   // Comments state
   const [showComments, setShowComments] = useState(false);
@@ -56,7 +56,7 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
 
     const nextState = !isLiked;
     setIsLiked(nextState);
-    setLikesCount(prev => prev + (nextState ? 1 : -1));
+    setLikesCount((prev: number) => prev + (nextState ? 1 : -1));
 
     try {
       const res = await toggleLike(post.id);
@@ -66,7 +66,7 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
       }
     } catch (e) {
       setIsLiked(!nextState);
-      setLikesCount(prev => prev + (nextState ? -1 : 1));
+      setLikesCount((prev: number) => prev + (nextState ? -1 : 1));
     }
   };
 
