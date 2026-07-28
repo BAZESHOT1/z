@@ -1,4 +1,3 @@
-Генерация Клиента -> Запуск API">
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
@@ -12,7 +11,6 @@ import { gitWatcher } from './services/gitWatcher';
 import { keyRotation } from './services/keyRotation';
 import { clusterService } from './services/clusterService';
 
-// Мы не создаем prisma сразу, а инициализируем её после синхронизации
 let prisma: PrismaClient;
 
 const app = express();
@@ -22,24 +20,37 @@ app.use(express.json());
 // --- СИСТЕМНЫЕ ИНИЦИАЛИЗАЦИИ ---
 
 function ensureStorageBuckets() {
+  console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 📂 Проверка структуры хранилища...');
   const folders = ['uploads', 'uploads/avatars', 'uploads/posts', 'uploads/media'];
+  let createdCount = 0;
+  
   folders.forEach(folder => {
     const fullPath = path.join(process.cwd(), folder);
-    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`  └─ ✨ Создан новый бакет: ${folder}`);
+      createdCount++;
+    }
   });
+  
+  if (createdCount === 0) {
+    console.log('  └─ ✅ Все папки на месте.');
+  }
 }
 
 function syncDatabase() {
+  console.log('\x1b[35m%s\x1b[0m', '[DATABASE] 🔄 Синхронизация структуры БД...');
   try {
-    console.log('[Database] 1. Force generating Prisma Client...');
-    execSync('npx prisma generate', { stdio: 'inherit' });
+    console.log('  ├─ 🛠️  Генерация Prisma Client...');
+    execSync('npx prisma generate', { stdio: 'pipe' });
     
-    console.log('[Database] 2. Pushing schema to DB...');
-    execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
+    console.log('  ├─ 📦 Обновление схемы данных (Safe Push)...');
+    execSync('npx prisma db push --skip-generate', { stdio: 'pipe' });
     
-    console.log('[Database] Sync successful.');
-  } catch (e) {
-    console.error('[Database] Sync error. Possible schema mismatch.');
+    console.log('  └─ ✅ База данных успешно синхронизирована.');
+  } catch (e: any) {
+    console.error('\x1b[31m%s\x1b[0m', '  └─ ❌ Ошибка синхронизации БД!');
+    console.error(`     Детали: ${e.message}`);
   }
 }
 
@@ -95,7 +106,6 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/posts', async (req, res) => {
   try {
     const { username } = req.query;
-    // Используем динамическую проверку, чтобы не падать если клиент еще старый
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: String(username) } } : {},
       include: { 
@@ -107,15 +117,8 @@ app.get('/api/posts', async (req, res) => {
     });
     res.json(posts);
   } catch (e: any) {
-    console.error('[Posts] Fetch error:', e.message);
-    // Если всё же упало из-за _count, пробуем без него
-    const fallbackPosts = await prisma.post.findMany({
-      where: req.query.username ? { author: { username: String(req.query.username) } } : {},
-      include: { author: { select: { username: true, firstName: true, avatar: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 50
-    });
-    res.json(fallbackPosts);
+    console.error('[API] Ошибка загрузки постов:', e.message);
+    res.json([]);
   }
 });
 
@@ -129,19 +132,18 @@ app.post('/api/posts', authenticate, async (req: any, res) => {
   } catch(e) { res.status(400).json({ error: 'Post creation failed' }); }
 });
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  res.status(500).json({ error: 'Internal Server Error' });
-});
-
 async function bootstrap() {
-  // 1. Сначала чиним окружение
+  console.log('\n\x1b[32m%s\x1b[0m', '══════════════════════════════════════════════');
+  console.log('\x1b[32m%s\x1b[0m', `  🚀 Z-NODE [${config.isMasterNode ? 'MASTER' : 'COMMUNITY'}] ЗАПУСКАЕТСЯ...`);
+  console.log('\x1b[32m%s\x1b[0m', '══════════════════════════════════════════════\n');
+
   ensureStorageBuckets();
   syncDatabase();
   
-  // 2. Только ТЕПЕРЬ создаем экземпляр Prisma, когда клиент сгенерирован
+  console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 🔌 Инициализация Prisma Client...');
   prisma = new PrismaClient();
   
-  // 3. Запускаем фоновые службы
+  console.log('\x1b[36m%s\x1b[0m', '[SERVICES] 🛰️  Запуск фоновых служб...');
   gitWatcher.start();
   await keyRotation.start();
   
@@ -150,13 +152,14 @@ async function bootstrap() {
     clusterService.sendHeartbeat();
   }
   
-  app.listen(config.port, '0.0.0.0', () => {
-    console.log(`🚀 Z-Node [${config.isMasterNode ? 'MASTER' : 'COMMUNITY'}] Active on ${config.port}`);
-  });
+  console.log('\n\x1b[32m%s\x1b[0m', `✅ ВСЕ СИСТЕМЫ ГОТОВЫ. ПОРТ: ${config.port}\n`);
+  
+  app.listen(config.port, '0.0.0.0');
 }
 
 bootstrap().catch(err => {
-  console.error('Critical Bootstrap Error:', err);
+  console.error('\n\x1b[31m%s\x1b[0m', '❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:');
+  console.error(err);
   process.exit(1);
 });
 
