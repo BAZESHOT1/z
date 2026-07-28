@@ -1,5 +1,5 @@
 services:
-  # ====== MASTER NODE ======
+  # ====== DATABASE (PostgreSQL) ======
   master-db:
     image: postgres:15-alpine
     container_name: Z-master-db
@@ -14,6 +14,23 @@ services:
     networks:
       - Z-network
 
+  # ====== STORAGE (S3/MinIO) ======
+  master-s3:
+    image: minio/minio:latest
+    container_name: Z-master-s3
+    ports:
+      - "9010:9000" # API порт (изменен, чтобы не было конфликта)
+      - "9011:9001" # Консоль управления
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    volumes:
+      - master_s3_data:/data
+    networks:
+      - Z-network
+
+  # ====== BACKEND (Master Node) ======
   master-backend:
     build:
       context: ./backend
@@ -25,55 +42,12 @@ services:
       - DATABASE_URL=postgresql://master_user:master_password@master-db:5432/z_master
       - IS_MASTER_NODE=true
       - JWT_SECRET=${JWT_SECRET:-master_key_777}
+      - S3_ENDPOINT=http://master-s3:9000
+      - S3_ACCESS_KEY=admin
+      - S3_SECRET_KEY=password123
     depends_on:
       - master-db
-    networks:
-      - Z-network
-
-  # ====== COMMUNITY NODE ======
-  community-db:
-    image: postgres:15-alpine
-    container_name: Z-community-db
-    environment:
-      POSTGRES_USER: community_user
-      POSTGRES_PASSWORD: community_password
-      POSTGRES_DB: z_community
-    ports:
-      - "5436:5432"
-    volumes:
-      - community_db_data:/var/lib/postgresql/data
-    networks:
-      - Z-network
-
-  community-s3:
-    image: minio/minio:latest
-    container_name: Z-community-s3
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
-    command: server /data --console-address ":9001"
-    volumes:
-      - community_s3_data:/data
-    networks:
-      - Z-network
-
-  community-backend:
-    build:
-      context: ./backend-community
-      dockerfile: Dockerfile
-    container_name: Z-community-api
-    ports:
-      - "4001:3000"
-    environment:
-      - DATABASE_URL=postgresql://community_user:community_password@community-db:5432/z_community
-      - MASTER_NODE_URL=http://master-backend:3000
-      - IS_MASTER_NODE=false
-    depends_on:
-      - community-db
-      - community-s3
+      - master-s3
     networks:
       - Z-network
 
@@ -83,5 +57,4 @@ networks:
 
 volumes:
   master_db_data:
-  community_db_data:
-  community_s3_data:
+  master_s3_data:
