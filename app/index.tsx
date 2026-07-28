@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions, TouchableOpacity, TextInput, RefreshControl, Modal } from 'react-native';
-import { Home, MessageSquare, LayoutGrid, User, Send, Heart, Repeat, Image as ImageIcon, Globe, Sun, Moon, LogIn, ArrowLeft, Bot, Activity, ShieldCheck, ShoppingBag, X } from 'lucide-react-native';
+import { Home, MessageSquare, LayoutGrid, User, Send, Heart, Repeat, Image as ImageIcon, Globe, Sun, Moon, LogIn, ArrowLeft, Bot, Activity, ShieldCheck, ShoppingBag, X, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, { FadeIn, SlideInUp, Layout as ReanimatedLayout } from 'react-native-reanimated';
 
 import { translations } from './i18n';
 import { useTheme } from './themeContext';
-import { fetchCurrentUser, fetchFeedPosts, setAuthToken, createPost, getAvatarUrl, toggleLike, fetchComments, createComment } from './api';
+import { fetchCurrentUser, fetchFeedPosts, setAuthToken, createPost, getAvatarUrl, toggleLike, fetchComments, createComment, fetchMiniApps, createMiniApp } from './api';
 import Sidebar from '../components/Sidebar';
 import Dock from '../components/Dock';
 
@@ -40,6 +40,13 @@ export default function MainApp() {
   // Image Preview Lightbox
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
+  // Telegram-style Mini Apps State
+  const [miniApps, setMiniApps] = useState<any[]>([]);
+  const [selectedApp, setSelectedApp] = useState<any | null>(null);
+  const [showAddAppModal, setShowAddAppModal] = useState(false);
+  const [newAppForm, setNewAppForm] = useState({ title: '', description: '', url: '', icon: '🚀' });
+  const [creatingApp, setCreatingApp] = useState(false);
+
   // Interactive Messaging State
   const [activeChatUser, setActiveChatUser] = useState<any | null>(null);
   const [messagesMap, setMessagesMap] = useState<Record<string, any[]>>({
@@ -67,6 +74,14 @@ export default function MainApp() {
       if (data) setUser(data);
     }
     loadFeed(1, true);
+    loadApps();
+  };
+
+  const loadApps = async () => {
+    try {
+      const apps = await fetchMiniApps();
+      setMiniApps(apps || []);
+    } catch (e) {}
   };
 
   const loadFeed = async (pageNum: number = 1, isReset: boolean = false) => {
@@ -122,6 +137,23 @@ export default function MainApp() {
       console.error(e);
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleCreateApp = async () => {
+    if (!newAppForm.title || !newAppForm.url) return;
+    setCreatingApp(true);
+    try {
+      const created = await createMiniApp(newAppForm);
+      if (created) {
+        setMiniApps([created, ...miniApps]);
+        setShowAddAppModal(false);
+        setNewAppForm({ title: '', description: '', url: '', icon: '🚀' });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCreatingApp(false);
     }
   };
 
@@ -248,6 +280,16 @@ export default function MainApp() {
     if (activeTab === 'chats') return t.chats;
     if (activeTab === 'apps') return t.apps;
     return t.profile;
+  };
+
+  // Build Telegram-style SSO Launch URL passing token and user params
+  const getAppLaunchUrl = (appUrl: string) => {
+    const params = new URLSearchParams({
+      z_token: user ? 'authenticated_jwt_session_token' : 'guest',
+      z_username: user?.username || 'guest',
+      z_user_id: user?.id ? String(user.id) : '0',
+    });
+    return appUrl.includes('?') ? `${appUrl}&${params.toString()}` : `${appUrl}?${params.toString()}`;
   };
 
   return (
@@ -545,72 +587,122 @@ export default function MainApp() {
                 </Animated.View>
               )}
 
-              {/* === TAB 3: Z APPS & ECOSYSTEM === */}
+              {/* === TAB 3: Z APPS & TELEGRAM-STYLE MINI APPS PLATFORM === */}
               {activeTab === 'apps' && (
                 <Animated.View entering={FadeIn} style={{ gap: 16 }}>
-                  <Text style={[styles.appsSubTitle, { color: colors.textSecondary }]}>{t.appsSub}</Text>
-
-                  {/* App 1: AI Assistant */}
-                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                      <Bot size={28} color="#6366f1" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.aiAssistant}</Text>
-                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.aiAssistantDesc}</Text>
-                    </View>
-                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
-                    </TouchableOpacity>
+                  <View style={styles.appsHeaderRow}>
+                    <Text style={[styles.appsSubTitle, { color: colors.textSecondary, flex: 1 }]}>{t.appsSub}</Text>
+                    {user && (
+                      <TouchableOpacity 
+                        style={[styles.addAppBtn, { backgroundColor: colors.primary }]}
+                        onPress={() => setShowAddAppModal(true)}
+                      >
+                        <Plus size={16} color="#fff" />
+                        <Text style={styles.addAppBtnText}>{t.addMiniApp}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
-                  {/* App 2: Z Mesh Node Monitor */}
-                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(35, 134, 54, 0.15)' }]}>
-                      <Activity size={28} color="#238636" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.meshMonitor}</Text>
-                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.meshMonitorDesc}</Text>
-                      <View style={styles.nodeStatsRow}>
-                        <Text style={[styles.nodeStatText, { color: colors.primary }]}>• {t.activeNodes}: 18</Text>
-                        <Text style={[styles.nodeStatText, { color: colors.textSecondary }]}>• {t.networkLatency}: 12ms</Text>
+                  {/* List of Custom & Official Mini Apps */}
+                  {miniApps.map((item) => (
+                    <View key={item.id} style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                      <View style={[styles.appIconBox, { backgroundColor: colors.badgeBg }]}>
+                        <Text style={{ fontSize: 24 }}>{item.icon || '🚀'}</Text>
                       </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.appCardTitle, { color: colors.text }]}>{item.title}</Text>
+                        <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{item.description}</Text>
+                      </View>
+                      <TouchableOpacity 
+                        style={[styles.appOpenBtn, { backgroundColor: colors.primary }]}
+                        onPress={() => setSelectedApp(item)}
+                      >
+                        <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
+                      </TouchableOpacity>
                     </View>
-                  </View>
-
-                  {/* App 3: Z Vault Storage */}
-                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(234, 179, 8, 0.15)' }]}>
-                      <ShieldCheck size={28} color="#eab308" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.storageVault}</Text>
-                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.storageVaultDesc}</Text>
-                    </View>
-                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.cardBorder }]}>
-                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* App 4: Z Market */}
-                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
-                      <ShoppingBag size={28} color="#ec4899" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.decentraMarket}</Text>
-                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.decentraMarketDesc}</Text>
-                    </View>
-                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.cardBorder }]}>
-                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
-                    </TouchableOpacity>
-                  </View>
+                  ))}
                 </Animated.View>
               )}
 
             </View>
           </ScrollView>
+
+          {/* Add Mini App Modal */}
+          <Modal visible={showAddAppModal} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalBox, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t.addMiniApp}</Text>
+                  <TouchableOpacity onPress={() => setShowAddAppModal(false)}>
+                    <X size={22} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ gap: 12 }}>
+                  <TextInput
+                    style={[styles.modalInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                    placeholder={t.appTitle}
+                    placeholderTextColor={colors.textSecondary}
+                    value={newAppForm.title}
+                    onChangeText={v => setNewAppForm({...newAppForm, title: v})}
+                  />
+                  <TextInput
+                    style={[styles.modalInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                    placeholder={t.appUrl}
+                    placeholderTextColor={colors.textSecondary}
+                    value={newAppForm.url}
+                    onChangeText={v => setNewAppForm({...newAppForm, url: v})}
+                  />
+                  <TextInput
+                    style={[styles.modalInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                    placeholder={t.appDesc}
+                    placeholderTextColor={colors.textSecondary}
+                    value={newAppForm.description}
+                    onChangeText={v => setNewAppForm({...newAppForm, description: v})}
+                  />
+                  <TextInput
+                    style={[styles.modalInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                    placeholder={t.appIcon}
+                    placeholderTextColor={colors.textSecondary}
+                    value={newAppForm.icon}
+                    onChangeText={v => setNewAppForm({...newAppForm, icon: v})}
+                  />
+
+                  <TouchableOpacity 
+                    style={[styles.modalSubmitBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleCreateApp}
+                    disabled={creatingApp}
+                  >
+                    {creatingApp ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitBtnText}>{t.createAppBtn}</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Telegram-style Mini App SSO Fullscreen Viewer */}
+          <Modal visible={selectedApp !== null} transparent animationType="slide">
+            <View style={[styles.appViewerContainer, { backgroundColor: colors.bg }]}>
+              <View style={[styles.appViewerHeader, { borderColor: colors.cardBorder, backgroundColor: colors.cardBg }]}>
+                <TouchableOpacity onPress={() => setSelectedApp(null)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={[styles.appViewerTitle, { color: colors.text }]}>{selectedApp?.title}</Text>
+                <View style={styles.ssoBadge}>
+                  <ShieldCheck size={14} color="#238636" />
+                  <Text style={styles.ssoBadgeText}>Z SSO Active</Text>
+                </View>
+              </View>
+
+              {selectedApp && (
+                <iframe
+                  src={getAppLaunchUrl(selectedApp.url)}
+                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' } as any}
+                  title={selectedApp.title}
+                />
+              )}
+            </View>
+          </Modal>
 
           {/* Lightbox Modal for Full Image View */}
           <Modal visible={lightboxImage !== null} transparent animationType="fade">
@@ -712,15 +804,32 @@ const styles = StyleSheet.create({
   chatSendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 
   // Apps styles
-  appsSubTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  appsHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  appsSubTitle: { fontSize: 14, fontWeight: '600' },
+  addAppBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderRadius: 10 },
+  addAppBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   appCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, borderWidth: 1 },
   appIconBox: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   appCardTitle: { fontSize: 16, fontWeight: '800' },
   appCardDesc: { fontSize: 12, lineHeight: 17, marginTop: 2 },
-  nodeStatsRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
-  nodeStatText: { fontSize: 11, fontWeight: '700' },
   appOpenBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
   appOpenBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalBox: { borderRadius: 20, padding: 20, width: '100%', maxWidth: 420, borderWidth: 1 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  modalInput: { padding: 12, borderRadius: 10, borderWidth: 1, fontSize: 14 },
+  modalSubmitBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  modalSubmitBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // Mini App Embedded Viewer
+  appViewerContainer: { flex: 1 },
+  appViewerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderBottomWidth: 1 },
+  appViewerTitle: { fontSize: 18, fontWeight: '800', flex: 1 },
+  ssoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(35, 134, 54, 0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  ssoBadgeText: { color: '#3fb950', fontSize: 11, fontWeight: '800' },
 
   // Lightbox
   lightboxOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 },

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
-import { ArrowLeft, Globe, LogOut, Sun, Moon } from 'lucide-react-native';
+import { ArrowLeft, Globe, LogOut, Sun, Moon, ShieldAlert, Key } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { translations } from './i18n';
 import { useTheme } from './themeContext';
-import { setAuthToken, fetchCurrentUser, updateProfile } from './api';
+import { setAuthToken, fetchCurrentUser, updateProfile, becomeAdmin } from './api';
 
 export default function SettingsScreen() {
   const { colors, theme, toggleTheme, lang, setLanguage } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [adminLoading, setAdminLoading] = useState(false);
   const t = translations[lang];
 
   useEffect(() => {
@@ -47,6 +48,20 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleBecomeAdmin = async () => {
+    setAdminLoading(true);
+    try {
+      const res = await becomeAdmin();
+      if (res && res.user) {
+        setUser(res.user);
+      }
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     await AsyncStorage.removeItem('auth_token');
     setAuthToken(null);
@@ -55,6 +70,8 @@ export default function SettingsScreen() {
 
   if (loading) return <View style={[styles.center, { backgroundColor: colors.bg }]}><ActivityIndicator color={colors.primary} /></View>;
   if (!user) return <View style={[styles.center, { backgroundColor: colors.bg }]}><Text style={{color: colors.text}}>Error loading profile</Text></View>;
+
+  const isAdmin = user.role === 'ADMIN' || user.role === 'ROOT';
 
   const PrivacyRow = ({ label, field }: { label: string, field: string }) => {
     const val = user[field] || 'EVERYONE';
@@ -79,10 +96,35 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        
+        {/* Testing Privilege Escalation Button */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Права доступа и роль</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+          {isAdmin ? (
+            <TouchableOpacity style={styles.row} onPress={() => router.push('/admin')}>
+              <View style={styles.rowLeft}>
+                <ShieldAlert color="#ef4444" size={20} />
+                <Text style={[styles.rowText, { color: '#ef4444' }]}>{t.adminPanel}</Text>
+              </View>
+              <Text style={[styles.valText, { color: '#238636' }]}>{user.role}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.row} onPress={handleBecomeAdmin} disabled={adminLoading}>
+              <View style={styles.rowLeft}>
+                <Key color={colors.primary} size={20} />
+                <Text style={[styles.rowText, { color: colors.text }]}>{t.becomeAdmin}</Text>
+              </View>
+              {adminLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.valText, { color: colors.primary }]}>ROLE: {user.role}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t.systemSettings}</Text>
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          
-          {/* Theme Switcher */}
           <TouchableOpacity style={styles.row} onPress={toggleTheme}>
             <View style={styles.rowLeft}>
               {theme === 'dark' ? <Sun color="#fbbf24" size={20} /> : <Moon color="#6366f1" size={20} />}
@@ -95,7 +137,6 @@ export default function SettingsScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
 
-          {/* Language Switcher */}
           <TouchableOpacity style={styles.row} onPress={toggleLanguage}>
             <View style={styles.rowLeft}>
               <Globe color={colors.textSecondary} size={20} />

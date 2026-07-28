@@ -67,9 +67,17 @@ export const translations = {
     online: "В сети",
     offline: "Был(а) недавно",
     
-    // Apps
+    // Apps & Telegram-style Mini Apps
     appsTitle: "Приложения Z Network",
-    appsSub: "Децентрализованные сервисы и утилиты экосистемы",
+    appsSub: "Децентрализованные сервисы и пользовательские dApps",
+    addMiniApp: "Добавить dApp",
+    appTitle: "Название приложения",
+    appUrl: "URL сайта (https://...)",
+    appDesc: "Описание",
+    appIcon: "Иконка (эмодзи или URL)",
+    createAppBtn: "Опубликовать приложение",
+    launchingApp: "Авторизация в Mini App...",
+    authenticatedAs: "Вход выполнен как",
     aiAssistant: "Z AI Помощник",
     aiAssistantDesc: "Умный ассистент для генерации текста, кода и анализа данных",
     meshMonitor: "Монитор нод Z Mesh",
@@ -78,10 +86,24 @@ export const translations = {
     storageVaultDesc: "Зашифрованное распределенное хранилище файлов AES-256",
     decentraMarket: "Z Market",
     decentraMarketDesc: "Каталог dApps и плагинов со всей сети",
-    openApp: "Открыть",
+    openApp: "Запустить",
     activeNodes: "Активных нод",
     networkLatency: "Задержка сети",
     encryptedStorage: "Шифрование",
+
+    // Admin Panel
+    adminPanel: "Панель администратора",
+    becomeAdmin: "Стать админом (ROOT)",
+    youAreAdmin: "Вы администратор (ROOT)",
+    usersCount: "Пользователей в базе",
+    nodesStatus: "Состояние кластера Z-Mesh",
+    dbHealth: "Состояние PostgreSQL",
+    changeRole: "Изменить роль",
+    roleUser: "Пользователь",
+    roleAdmin: "Администратор",
+    roleRoot: "Root (Суперадмин)",
+    systemLogs: "Системный журнал ноды",
+    accessDenied: "Доступ запрещен. Требуются права администратора.",
   },
   en: {
     home: "Feed",
@@ -151,9 +173,17 @@ export const translations = {
     online: "Online",
     offline: "Offline",
 
-    // Apps
+    // Apps & Telegram-style Mini Apps
     appsTitle: "Z Network Apps",
-    appsSub: "Decentralized ecosystem services and mini-apps",
+    appsSub: "Decentralized ecosystem services and user-submitted dApps",
+    addMiniApp: "Add dApp",
+    appTitle: "App Name",
+    appUrl: "Website URL (https://...)",
+    appDesc: "Description",
+    appIcon: "Icon (emoji or URL)",
+    createAppBtn: "Publish App",
+    launchingApp: "Authenticating Mini App...",
+    authenticatedAs: "Logged in as",
     aiAssistant: "Z AI Assistant",
     aiAssistantDesc: "Smart AI for code generation, writing & data analysis",
     meshMonitor: "Z Mesh Node Monitor",
@@ -162,10 +192,24 @@ export const translations = {
     storageVaultDesc: "Distributed AES-256 encrypted media bucket",
     decentraMarket: "Z Market",
     decentraMarketDesc: "dApps and plugin store built for Z Network",
-    openApp: "Open App",
+    openApp: "Launch App",
     activeNodes: "Active Nodes",
     networkLatency: "Network Ping",
     encryptedStorage: "Encryption",
+
+    // Admin Panel
+    adminPanel: "Admin Panel",
+    becomeAdmin: "Become Admin (ROOT)",
+    youAreAdmin: "You are ROOT Administrator",
+    usersCount: "Database Users",
+    nodesStatus: "Z-Mesh Cluster Status",
+    dbHealth: "PostgreSQL Health",
+    changeRole: "Change Role",
+    roleUser: "User",
+    roleAdmin: "Admin",
+    roleRoot: "Root (Superadmin)",
+    systemLogs: "System Node Logs",
+    accessDenied: "Access denied. Administrator privileges required.",
   }
 };
 

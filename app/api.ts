@@ -45,6 +45,12 @@ export const loginUser = (data: any) => request('/api/auth/login', { method: 'PO
 export const registerUser = (data: any) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) });
 export const checkUsername = (username: string) => request(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
 
+// Admin & Role API
+export const becomeAdmin = () => request('/api/auth/become-admin', { method: 'POST' });
+export const fetchAdminUsers = () => request('/api/admin/users').then(res => res || []);
+export const updateUserRole = (userId: number, role: string) => request(`/api/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) });
+export const fetchAdminStats = () => request('/api/admin/stats');
+
 // Paginated Feed
 export const fetchFeedPosts = (page: number = 1, limit: number = 10, username?: string) => 
   request(`/api/posts/feed?page=${page}&limit=${limit}${username ? `&username=${encodeURIComponent(username)}` : ''}`);
@@ -77,6 +83,11 @@ export const fetchFollowers = (username: string) =>
 
 export const fetchFollowing = (username: string) => 
   request(`/api/users/${encodeURIComponent(username)}/following`).then(res => res || []);
+
+// Telegram-style Mini Apps API
+export const fetchMiniApps = () => request('/api/apps').then(res => res || []);
+export const createMiniApp = (data: { title: string, description: string, url: string, icon?: string }) => 
+  request('/api/apps', { method: 'POST', body: JSON.stringify(data) });
 
 export const uploadMedia = (base64Data: string) => 
   request('/api/upload', { method: 'POST', body: JSON.stringify({ file: base64Data }) });

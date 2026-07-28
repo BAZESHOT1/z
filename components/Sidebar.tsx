@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Home, MessageSquare, LayoutGrid, User, Settings, Globe, Sun, Moon } from 'lucide-react-native';
+import { Home, MessageSquare, LayoutGrid, User, Settings, Globe, Sun, Moon, ShieldAlert } from 'lucide-react-native';
 import { useTheme } from '../app/themeContext';
+import { router } from 'expo-router';
 
 interface SidebarProps {
   activeTab: string;
@@ -12,6 +13,8 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, onTabPress, t, user }: SidebarProps) {
   const { colors, theme, toggleTheme, lang, setLanguage } = useTheme();
+
+  const isAdmin = user && (user.role === 'ADMIN' || user.role === 'ROOT');
 
   const NavItem = ({ id, icon: Icon, label }: any) => {
     const active = activeTab === id;
@@ -54,6 +57,16 @@ export default function Sidebar({ activeTab, onTabPress, t, user }: SidebarProps
             <>
               <NavItem id="profile" icon={User} label={t.profile} />
               <NavItem id="settings" icon={Settings} label={t.settings} />
+
+              {isAdmin && (
+                <TouchableOpacity 
+                  style={[styles.element, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
+                  onPress={() => router.push('/admin')}
+                >
+                  <ShieldAlert size={19} color="#ef4444" />
+                  <Text style={[styles.label, { color: '#ef4444' }]}>{t.adminPanel}</Text>
+                </TouchableOpacity>
+              )}
             </>
           ) : (
             <>
@@ -65,7 +78,6 @@ export default function Sidebar({ activeTab, onTabPress, t, user }: SidebarProps
                 <Text style={[styles.label, { color: colors.primary }]}>{t.signIn}</Text>
               </TouchableOpacity>
 
-              {/* Language Switch for Guest */}
               <TouchableOpacity 
                 style={styles.element}
                 onPress={() => setLanguage(lang === 'ru' ? 'en' : 'ru')}
@@ -78,7 +90,6 @@ export default function Sidebar({ activeTab, onTabPress, t, user }: SidebarProps
             </>
           )}
 
-          {/* Theme Switch Button */}
           <TouchableOpacity 
             style={styles.element}
             onPress={toggleTheme}
