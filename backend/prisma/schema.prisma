@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client-client-js"
 }
 
 datasource db {
@@ -11,40 +11,52 @@ model User {
   id             Int      @id @default(autoincrement())
   username       String   @unique
   password       String
-  email          String?
+  email          String   @unique
   firstName      String?
   lastName       String?
-  bio            String?
   avatar         String?
-  role           String   @default("USER")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  bio            String?
+  nodeId         String   @default("master")
+  createdAt      @default(now())
   
   posts          Post[]
-  followedBy     Follows[] @relation("following")
-  following      Follows[] @relation("follower")
-}
-
-model Follows {
-  follower    User @relation("follower", fields: [followerId], references: [id])
-  followerId  Int
-  following   User @relation("following", fields: [followingId], references: [id])
-  followingId Int
-
-  @@id([followerId, followingId])
+  likes          Like[]
+  comments       Comment[]
+  
+  // Приватность
+  privacyProfile  String   @default("EVERYONE")
+  privacyMessages String   @default("EVERYONE")
+  privacyPosts    String   @default("EVERYONE")
 }
 
 model Post {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   content   String
-  author    User     @relation(fields: [authorId], references: [id])
   authorId  Int
-  createdAt DateTime @default(now())
+  author    User      @relation(fields: [authorId], references: [id])
+  createdAt DateTime  @default(now())
+  
+  likes     Like[]
+  comments  Comment[]
 }
 
-model EncryptionKey {
+model Like {
   id        Int      @id @default(autoincrement())
-  key       String
+  userId    Int
+  postId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+  
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  userId    Int
+  postId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
   createdAt DateTime @default(now())
 }
 
@@ -53,7 +65,10 @@ model ClusterNode {
   url       String
   status    String   @default("active")
   lastSeen  DateTime @default(now())
-  load      Json?
-  owner     String?
+}
+
+model EncryptionKey {
+  id        Int      @id @default(autoincrement())
+  key       String
   createdAt DateTime @default(now())
 }
