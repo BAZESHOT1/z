@@ -14,20 +14,16 @@ function getHeaders() {
   return headers;
 }
 
-export async function checkUsername(username: string) {
-  const res = await fetch(`${API_URL}/api/auth/check-username?username=${encodeURIComponent(username)}`);
-  return await res.json();
-}
-
-export async function registerUser(data: any) {
-  const res = await fetch(`${API_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Connection failed');
-  return json;
+export async function fetchCurrentUser() {
+  if (!authToken) return null;
+  try {
+    const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
+    if (res.status === 401) {
+      setAuthToken(null);
+      return null;
+    }
+    return res.ok ? await res.json() : null;
+  } catch (e) { return null; }
 }
 
 export async function loginUser(data: any) {
@@ -37,46 +33,7 @@ export async function loginUser(data: any) {
     body: JSON.stringify(data),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Authentication error');
-  return json;
-}
-
-export async function fetchCurrentUser() {
-  if (!authToken) return null;
-  try {
-    const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) { return null; }
-}
-
-export async function fetchUserProfile(username: string) {
-  try {
-    const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) { return null; }
-}
-
-export async function updateProfile(data: any) {
-  // Тщательно фильтруем данные, чтобы не слать пустые строки там, где не надо
-  const allowed = ['firstName', 'lastName', 'bio', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts', 'avatar'];
-  const filtered: any = {};
-  
-  allowed.forEach(k => { 
-    if (data[k] !== undefined && data[k] !== null) {
-      filtered[k] = data[k];
-    }
-  });
-
-  const res = await fetch(`${API_URL}/api/auth/profile`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify(filtered),
-  });
-  
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Update failed');
+  if (!res.ok) throw new Error(json.error || 'Auth failed');
   return json;
 }
 
@@ -97,10 +54,29 @@ export async function createPost(content: string) {
   return await res.json();
 }
 
-export async function toggleFollow(userId: string) {
-  const res = await fetch(`${API_URL}/api/users/${userId}/follow`, {
+export async function toggleLike(postId: number) {
+  const res = await fetch(`${API_URL}/api/posts/${postId}/like`, {
     method: 'POST',
     headers: getHeaders(),
   });
   return await res.json();
+}
+
+export async function checkUsername(username: string) {
+  const res = await fetch(`${API_URL}/api/auth/check-username?username=${encodeURIComponent(username)}`);
+  return await res.json();
+}
+
+export async function registerUser(data: any) {
+  const res = await fetch(`${API_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+  return await res.json();
+}
+
+export async function fetchUserProfile(username: string) {
+  const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
+  return res.ok ? await res.json() : null;
 }
