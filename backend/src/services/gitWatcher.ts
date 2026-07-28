@@ -2,28 +2,19 @@ import { exec } from 'child_process';
 
 class GitWatcher {
   private isUpdating = false;
-  private checkInterval = 30000;
 
   public start() {
     if (process.env.AUTO_UPDATE !== 'true') return;
-    
-    console.log('🔄 GitWatcher: Monitoring for updates...');
-    setInterval(() => this.checkForUpdates(), this.checkInterval);
-    this.checkForUpdates();
+    setInterval(() => this.checkForUpdates(), 30000);
   }
 
   private async checkForUpdates() {
     if (this.isUpdating) return;
-
-    // Проверяем наличие обновлений в main
-    const checkCmd = 'cd /app/repo && git fetch origin main && git rev-parse HEAD && git rev-parse origin/main';
     
-    exec(checkCmd, (err, stdout) => {
-      if (err) return;
-
-      const hashes = stdout.trim().split('\n');
-      if (hashes.length === 2 && hashes[0] !== hashes[1]) {
-        console.log(`🚀 Update detected! ${hashes[0].substring(0,7)} -> ${hashes[1].substring(0,7)}`);
+    // Проверяем удаленный репозиторий без скачивания
+    exec('cd /app/repo && git fetch origin main && git status -uno', (err, stdout) => {
+      if (stdout.includes('Your branch is behind')) {
+        console.log('🔄 [GitWatcher] New version detected. Pulling changes...');
         this.performUpdate();
       }
     });
@@ -31,17 +22,15 @@ class GitWatcher {
 
   private performUpdate() {
     this.isUpdating = true;
+    const cmd = 'cd /app/repo && git pull origin main && docker compose up -d --build';
     
-    // Выполняем pull и пересборку всех активных контейнеров
-    const updateCmd = 'cd /app/repo && git pull origin main && docker compose up -d --build';
-    
-    exec(updateCmd, (err, stdout, stderr) => {
+    exec(cmd, (err, stdout, stderr) => {
       if (err) {
-        console.error('❌ Update failed:', stderr);
+        console.error('❌ [GitWatcher] Update failed:', stderr);
         this.isUpdating = false;
         return;
       }
-      console.log('✅ Update successful. Services are restarting...');
+      console.log('✅ [GitWatcher] Update applied. Containers restarting...');
     });
   }
 }

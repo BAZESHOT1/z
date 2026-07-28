@@ -12,40 +12,14 @@ import { keyRotation } from './services/keyRotation';
 import { clusterService } from './services/clusterService';
 
 let prisma: PrismaClient;
-
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// --- СИСТЕМНЫЕ ИНИЦИАЛИЗАЦИИ ---
-
-function ensureStorageBuckets() {
-  console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 📂 Проверка структуры хранилища...');
-  const folders = ['uploads', 'uploads/avatars', 'uploads/posts', 'uploads/media'];
-  folders.forEach(folder => {
-    const fullPath = path.join(process.cwd(), folder);
-    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
-  });
-}
-
-function syncDatabase() {
-  console.log('\x1b[35m%s\x1b[0m', '[DATABASE] 🔄 Синхронизация структуры БД...');
-  try {
-    // Явно генерируем клиент и пушим схему
-    execSync('npx prisma generate', { stdio: 'inherit' });
-    execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
-    console.log('  └─ ✅ База данных успешно синхронизирована.');
-  } catch (e: any) {
-    console.error('  └─ ❌ Ошибка синхронизации БД:', e.message);
-  }
-}
-
-// --- AUTH MIDDLEWARE ---
-
+// --- МИДДЛВАРЫ ---
 const authenticate = async (req: any, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
-  
   try {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, config.jwtSecret) as any;
@@ -53,131 +27,129 @@ const authenticate = async (req: any, res: Response, next: NextFunction) => {
     if (!user) return res.status(401).json({ error: 'User not found' });
     req.user = user;
     next();
-  } catch (e) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
+  } catch (e) { res.status(401).json({ error: 'Invalid token' }); }
 };
 
-// --- AUTH ROUTES ---
-
-app.get('/api/auth/me', authenticate, (req: any, res) => {
-  res.json(req.user);
-});
-
-app.get('/api/auth/check-username', async (req, res) => {
-  const { username } = req.query;
-  if (!username) return res.status(400).json({ error: 'Username is required' });
-  try {
-    const user = await prisma.user.findUnique({ where: { username: String(username) } });
-    res.json({ available: !user });
-  } catch (e) { res.status(500).json({ error: 'Check failed' }); }
-});
-
+// --- AUTH ---
 app.post('/api/auth/register', async (req, res) => {
   const { username, password, email, firstName } = req.body;
   try {
     const user = await prisma.user.create({
-      data: {
-        username,
-        password: hashPassword(password),
-        email: email,
-        firstName: firstName || username,
-        nodeId: config.nodeId
-      }
+      data: { username, password: hashPassword(password), email, firstName: firstName || username, nodeId: config.nodeId }
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.status(201).json({ token, user });
-  } catch (e) { res.status(400).json({ error: 'Registration failed' }); }
+  } catch (e) { res.status(400).json({ error: 'User exists or invalid data' }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { username } });
-    if (!user || !verifyPassword(password, user.password)) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (!user || !verifyPassword(password, user.password)) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.json({ token, user });
   } catch (e) { res.status(500).json({ error: 'Login error' }); }
 });
 
-// --- USER & POST ROUTES ---
+app.get('/api/auth/me', authenticate, (req: any, res) => res.json(req.user));
 
-app.get('/api/users/:username', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { username: req.params.username },
-      include: { _count: { select: { posts: true, likes: true } } }
-    });
-    if (!user) return res.status(404).json({ error: 'Not found' });
-    res.json(user);
-  } catch (e) { res.status(500).json({ error: 'Fetch failed' }); }
+app.get('/api/auth/check-username', async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { username: String(req.query.username) } });
+  res.json({ available: !user });
 });
 
+// --- USERS & PROFILES ---
+app.get('/api/users/:username', async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { username: req.params.username },
+    include: { _count: { select: { posts: true, followers: true, following: true } } }
+  });
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  res.json(user);
+});
+
+app.post('/api/users/update', authenticate, async (req: any, res) => {
+  const updated = await prisma.user.update({
+    where: { id: req.user.id },
+    data: req.body
+  });
+  res.json(updated);
+});
+
+app.post('/api/users/:id/follow', authenticate, async (req: any, res) => {
+  const targetId = parseInt(req.params.id);
+  const existing = await (prisma as any).follow.findUnique({
+    where: { followerId_followingId: { followerId: req.user.id, followingId: targetId } }
+  });
+  if (existing) {
+    await (prisma as any).follow.delete({ where: { id: existing.id } });
+    return res.json({ following: false });
+  }
+  await (prisma as any).follow.create({ data: { followerId: req.user.id, followingId: targetId } });
+  res.json({ following: true });
+});
+
+// --- POSTS ---
 app.get('/api/posts', async (req, res) => {
-  try {
-    const { username } = req.query;
-    // Безопасная выборка: если _count еще не готов в клиенте, пробуем без него
-    try {
-      const posts = await prisma.post.findMany({
-        where: username ? { author: { username: String(username) } } : {},
-        include: { 
-          author: { select: { username: true, firstName: true, avatar: true } },
-          _count: { select: { likes: true, comments: true } }
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50
-      });
-      return res.json(posts);
-    } catch (innerErr) {
-       const fallback = await prisma.post.findMany({
-         where: username ? { author: { username: String(username) } } : {},
-         include: { author: { select: { username: true, firstName: true, avatar: true } } },
-         orderBy: { createdAt: 'desc' },
-         take: 50
-       });
-       return res.json(fallback);
-    }
-  } catch (e: any) { res.json([]); }
+  const { username } = req.query;
+  const posts = await prisma.post.findMany({
+    where: username ? { author: { username: String(username) } } : {},
+    include: { 
+      author: { select: { username: true, firstName: true, avatar: true } },
+      _count: { select: { likes: true, comments: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+  res.json(posts);
 });
 
 app.post('/api/posts', authenticate, async (req: any, res) => {
-  try {
-    const post = await prisma.post.create({
-      data: { content: req.body.content, authorId: req.user.id },
-      include: { author: { select: { username: true, firstName: true, avatar: true } } }
-    });
-    res.json(post);
-  } catch(e) { res.status(400).json({ error: 'Post creation failed' }); }
+  const post = await prisma.post.create({
+    data: { content: req.body.content, authorId: req.user.id },
+    include: { author: { select: { username: true, firstName: true, avatar: true } } }
+  });
+  res.json(post);
 });
 
-async function bootstrap() {
-  console.log('\n\x1b[32m%s\x1b[0m', '══════════════════════════════════════════════');
-  console.log('\x1b[32m%s\x1b[0m', `  🚀 Z-NODE [${config.isMasterNode ? 'MASTER' : 'COMMUNITY'}] ЗАПУСКАЕТСЯ...`);
-  console.log('\x1b[32m%s\x1b[0m', '══════════════════════════════════════════════\n');
+app.post('/api/posts/:id/like', authenticate, async (req: any, res) => {
+  const postId = parseInt(req.params.id);
+  const existing = await (prisma as any).like.findUnique({
+    where: { userId_postId: { userId: req.user.id, postId } }
+  });
+  if (existing) {
+    await (prisma as any).like.delete({ where: { id: existing.id } });
+    return res.json({ liked: false });
+  }
+  await (prisma as any).like.create({ data: { userId: req.user.id, postId } });
+  res.json({ liked: true });
+});
 
-  ensureStorageBuckets();
-  syncDatabase();
+// --- BOOTSTRAP ---
+async function bootstrap() {
+  console.log('[SYSTEM] Starting node...');
   
-  console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 🔌 Инициализация Prisma Client...');
-  prisma = new PrismaClient();
-  
+  // 1. Бакеты
+  ['uploads', 'uploads/avatars', 'uploads/posts'].forEach(f => {
+    if (!fs.existsSync(path.join(process.cwd(), f))) fs.mkdirSync(path.join(process.cwd(), f), { recursive: true });
+  });
+
+  // 2. БД и Клиент (Критично для правильного обновления)
+  try {
+    execSync('npx prisma generate', { stdio: 'inherit' });
+    execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
+    prisma = new PrismaClient();
+  } catch (e) {
+    console.error('[DB] Failed to sync. Check DATABASE_URL.');
+    process.exit(1);
+  }
+
   gitWatcher.start();
   await keyRotation.start();
-  
-  if (!config.isMasterNode) {
-    await clusterService.registerWithMaster('System');
-    clusterService.sendHeartbeat();
-  }
-  
-  console.log('\n\x1b[32m%s\x1b[0m', `✅ ВСЕ СИСТЕМЫ ГОТОВЫ. ПОРТ: ${config.port}\n`);
-  app.listen(config.port, '0.0.0.0');
+  if (!config.isMasterNode) clusterService.registerWithMaster('System');
+
+  app.listen(config.port, '0.0.0.0', () => console.log(`🚀 Z-NODE READY ON ${config.port}`));
 }
 
-bootstrap().catch(err => {
-  console.error('\x1b[31m%s\x1b[0m', '❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:', err);
-  process.exit(1);
-});
-
-export { prisma };
+bootstrap();
