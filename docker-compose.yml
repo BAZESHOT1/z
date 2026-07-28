@@ -43,7 +43,8 @@ services:
     container_name: Z-backend
     ports:
       - "${BACKEND_PORT:-4000}:3000"
-    command: sh -c "npx prisma db push --force-reset && npm run dev"
+    # Убрали --force-reset, добавили generate перед запуском
+    command: sh -c "npx prisma db push && npx prisma generate && npm run dev"
     volumes:
       - ./backend/src:/app/src
     environment:

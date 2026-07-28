@@ -32,6 +32,8 @@ async function getUserFromReq(req: Request) {
 async function areFriends(userId1: string, userId2: string) {
   try {
     const p = prisma as any;
+    // Проверка, что модель Follow существует в текущем сгенерированном клиенте
+    if (!p.follow) return false;
     const f1 = await p.follow.findUnique({ where: { followerId_followingId: { followerId: userId1, followingId: userId2 } } });
     const f2 = await p.follow.findUnique({ where: { followerId_followingId: { followerId: userId2, followingId: userId1 } } });
     return !!f1 && !!f2;
@@ -79,6 +81,7 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
     
     const body = req.body;
     const updateData: any = {};
+    // Список всех возможных полей
     const fields = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'birthDate', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
     
     fields.forEach(f => {
@@ -94,7 +97,7 @@ app.put('/api/auth/profile', async (req: Request, res: Response) => {
 
     res.json({ ...updated, bio: decryptField(updated.bio) });
   } catch (e: any) { 
-    console.error('Update Error:', e.message);
+    console.error('Update Profile Error:', e.message);
     res.status(500).json({ error: e.message }); 
   }
 });
@@ -109,15 +112,21 @@ app.get('/api/users/:username', async (req: Request, res: Response) => {
     let stats = { followers: 0, following: 0 };
     let isFollowing = false;
     
-    stats.followers = await prisma.follow.count({ where: { followingId: owner.id } });
-    stats.following = await prisma.follow.count({ where: { followerId: owner.id } });
-    
-    if (viewer) {
-      const f = await prisma.follow.findUnique({ where: { followerId_followingId: { followerId: viewer.id, followingId: owner.id } } });
-      isFollowing = !!f;
+    const p = prisma as any;
+    if (p.follow) {
+      try {
+        stats.followers = await p.follow.count({ where: { followingId: owner.id } });
+        stats.following = await p.follow.count({ where: { followerId: owner.id } });
+        if (viewer) {
+          const f = await p.follow.findUnique({ where: { followerId_followingId: { followerId: viewer.id, followingId: owner.id } } });
+          isFollowing = !!f;
+        }
+      } catch (err) {
+        console.error('Stats error:', err);
+      }
     }
 
-    const privacy = owner.privacyProfile || 'EVERYONE';
+    const privacy = (owner as any).privacyProfile || 'EVERYONE';
     const hasAccess = await canAccess(viewer?.id, owner, privacy as PrivacyLevel);
     
     if (!hasAccess) return res.json({ username: owner.username, avatar: owner.avatar, isRestricted: true, isFollowing, _count: stats });
@@ -128,15 +137,17 @@ app.get('/api/users/:username', async (req: Request, res: Response) => {
 app.post('/api/users/:userId/follow', async (req: Request, res: Response) => {
   const viewer = await getUserFromReq(req);
   if (!viewer) return res.status(401).json({ error: 'Unauthorized' });
+  const p = prisma as any;
+  if (!p.follow) return res.status(503).json({ error: 'System updating' });
   
   try {
     const where = { followerId_followingId: { followerId: viewer.id, followingId: req.params.userId } };
-    const existing = await prisma.follow.findUnique({ where });
+    const existing = await p.follow.findUnique({ where });
     if (existing) {
-      await prisma.follow.delete({ where });
+      await p.follow.delete({ where });
       return res.json({ following: false });
     } else {
-      await prisma.follow.create({ data: { followerId: viewer.id, followingId: req.params.userId } });
+      await p.follow.create({ data: { followerId: viewer.id, followingId: req.params.userId } });
       return res.json({ following: true });
     }
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
@@ -150,7 +161,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
     
     if (username) {
       const owner = await prisma.user.findUnique({ where: { username: username as string } });
-      const privacy = owner?.privacyPosts || 'EVERYONE';
+      const privacy = (owner as any)?.privacyPosts || 'EVERYONE';
       if (!owner || !(await canAccess(viewer?.id, owner, privacy as PrivacyLevel))) return res.json([]);
       where.authorId = owner.id;
     }
