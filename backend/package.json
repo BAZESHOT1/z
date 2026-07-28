@@ -1,13 +1,11 @@
 {
-  "name": "socialnet-backend",
+  "name": "socialnet-master",
   "version": "1.0.0",
   "main": "dist/app.js",
   "scripts": {
     "build": "prisma generate && tsc",
-    "db:push": "prisma db push",
-    "generate": "prisma generate",
     "start": "prisma generate && prisma db push && node dist/app.js",
-    "dev": "prisma db push && prisma generate && ts-node-dev --respawn --transpile-only src/app.ts"
+    "dev": "prisma generate && prisma db push && ts-node-dev --respawn --transpile-only src/app.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
