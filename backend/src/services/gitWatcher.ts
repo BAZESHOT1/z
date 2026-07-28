@@ -1,45 +1,59 @@
 import { exec } from 'child_process';
-import { config } from '../config';
 
 class GitWatcher {
   private isUpdating = false;
+  private checkInterval = 30000; // Проверка каждые 30 секунд
 
   public start() {
-    if (process.env.AUTO_UPDATE !== 'true') return;
+    if (process.env.AUTO_UPDATE !== 'true') {
+      console.log('ℹ️ GitWatcher: Auto-update is disabled.');
+      return;
+    }
     
-    console.log('🔄 GitWatcher: Monitoring for updates...');
-    // Проверка каждую минуту
-    setInterval(() => this.checkForUpdates(), 60000);
+    console.log('🔄 GitWatcher: Monitoring for updates via commit hashes...');
+    setInterval(() => this.checkForUpdates(), this.checkInterval);
+    // Проверяем сразу при старте
+    this.checkForUpdates();
   }
 
   private async checkForUpdates() {
     if (this.isUpdating) return;
 
-    // Переходим в папку монтированного репозитория и проверяем статус
-    const cmd = 'cd /app/repo && git fetch origin && git status -uno';
+    // 1. Получаем хэш локальной ветки и удаленной
+    const checkCmd = 'cd /app/repo && git fetch origin main && git rev-parse HEAD && git rev-parse origin/main';
     
-    exec(cmd, (err, stdout) => {
-      if (stdout && stdout.includes('Your branch is behind')) {
-        console.log('🚀 New version detected! Starting update process...');
-        this.isUpdating = true;
+    exec(checkCmd, (err, stdout) => {
+      if (err) {
+        console.error('❌ GitWatcher: Failed to fetch or compare hashes. Check git credentials.');
+        return;
+      }
+
+      const [localHash, remoteHash] = stdout.trim().split('\n');
+      
+      if (localHash && remoteHash && localHash !== remoteHash) {
+        console.log(`🚀 GitWatcher: Update detected! Local: ${localHash.substring(0,7)}, Remote: ${remoteHash.substring(0,7)}`);
         this.performUpdate();
       }
     });
   }
 
   private performUpdate() {
-    // 1. Стягиваем код
-    // 2. Пересобираем и перезапускаем через докер хоста
-    const updateCmd = 'cd /app/repo && git pull && docker compose up -d --build';
+    this.isUpdating = true;
+    
+    // Команда для обновления: тянем код и просим докер пересобрать и перезапустить сервисы
+    // Используем --no-deps чтобы не трогать базу, если не нужно
+    const updateCmd = 'cd /app/repo && git pull origin main && docker compose up -d --build z-backend community-backend';
+    
+    console.log('⏳ GitWatcher: Executing update command...');
     
     exec(updateCmd, (err, stdout, stderr) => {
       if (err) {
-        console.error('❌ Update failed:', stderr);
+        console.error('❌ GitWatcher: Update failed!', stderr);
         this.isUpdating = false;
         return;
       }
-      console.log('✅ Update successful. Docker is restarting containers...');
-      // Контейнер сам умрет и заменится новым после этой команды
+      console.log('✅ GitWatcher: Update successful. Container will now restart.');
+      // После docker compose up контейнер получит сигнал завершения и будет заменен новым
     });
   }
 }
