@@ -4,14 +4,14 @@ import { prisma } from '../prisma';
 
 class KeyRotationService {
   public async start() {
-    // Проверка раз в сутки
     cron.schedule('0 0 * * *', () => this.rotateIfNeeded());
     await this.rotateIfNeeded();
   }
 
   private async rotateIfNeeded() {
-    if (!prisma) return; // Защита от раннего вызова
     try {
+      if (!prisma || !(prisma as any).encryptionKey) return;
+      
       const latestKey = await prisma.encryptionKey.findFirst({
         orderBy: { createdAt: 'desc' }
       });
