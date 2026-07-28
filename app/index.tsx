@@ -422,7 +422,7 @@ export default function MainApp() {
                         )}
                       </Animated.View>
                     ))
-                  }
+                  )}
 
                   {loadingMore && (
                     <View style={styles.loadingMoreBox}>
