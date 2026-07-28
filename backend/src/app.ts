@@ -1,3 +1,4 @@
+Генерация Клиента -> Запуск API">
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
@@ -11,9 +12,10 @@ import { gitWatcher } from './services/gitWatcher';
 import { keyRotation } from './services/keyRotation';
 import { clusterService } from './services/clusterService';
 
-const app = express();
-export const prisma = new PrismaClient();
+// Мы не создаем prisma сразу, а инициализируем её после синхронизации
+let prisma: PrismaClient;
 
+const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
@@ -23,19 +25,21 @@ function ensureStorageBuckets() {
   const folders = ['uploads', 'uploads/avatars', 'uploads/posts', 'uploads/media'];
   folders.forEach(folder => {
     const fullPath = path.join(process.cwd(), folder);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
-    }
+    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
   });
 }
 
 function syncDatabase() {
   try {
-    console.log('[Database] Generating client & syncing...');
-    execSync('npx prisma generate && npx prisma db push', { stdio: 'inherit' });
+    console.log('[Database] 1. Force generating Prisma Client...');
+    execSync('npx prisma generate', { stdio: 'inherit' });
+    
+    console.log('[Database] 2. Pushing schema to DB...');
+    execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
+    
     console.log('[Database] Sync successful.');
   } catch (e) {
-    console.error('[Database] Sync error (Check connections)');
+    console.error('[Database] Sync error. Possible schema mismatch.');
   }
 }
 
@@ -66,14 +70,14 @@ app.post('/api/auth/register', async (req, res) => {
       data: {
         username,
         password: hashPassword(password),
-        email: email, // Пока без шифрования для теста 401
+        email: email,
         firstName: firstName || username,
         nodeId: config.nodeId
       }
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.status(201).json({ token, user });
-  } catch (e) { res.status(400).json({ error: 'Registration failed' }); }
+  } catch (e) { res.status(400).json({ error: 'User registration failed' }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -91,6 +95,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/posts', async (req, res) => {
   try {
     const { username } = req.query;
+    // Используем динамическую проверку, чтобы не падать если клиент еще старый
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: String(username) } } : {},
       include: { 
@@ -102,9 +107,15 @@ app.get('/api/posts', async (req, res) => {
     });
     res.json(posts);
   } catch (e: any) {
-    console.error('Post fetch error:', e.message);
-    // Если Prisma еще не видит связи, отдаем пустой массив вместо 500
-    res.json([]);
+    console.error('[Posts] Fetch error:', e.message);
+    // Если всё же упало из-за _count, пробуем без него
+    const fallbackPosts = await prisma.post.findMany({
+      where: req.query.username ? { author: { username: String(req.query.username) } } : {},
+      include: { author: { select: { username: true, firstName: true, avatar: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+    res.json(fallbackPosts);
   }
 });
 
@@ -119,19 +130,34 @@ app.post('/api/posts', authenticate, async (req: any, res) => {
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  res.status(500).json({ error: 'Internal Error' });
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 async function bootstrap() {
+  // 1. Сначала чиним окружение
   ensureStorageBuckets();
   syncDatabase();
+  
+  // 2. Только ТЕПЕРЬ создаем экземпляр Prisma, когда клиент сгенерирован
+  prisma = new PrismaClient();
+  
+  // 3. Запускаем фоновые службы
   gitWatcher.start();
   await keyRotation.start();
+  
   if (!config.isMasterNode) {
     await clusterService.registerWithMaster('System');
     clusterService.sendHeartbeat();
   }
-  app.listen(config.port, '0.0.0.0', () => console.log(`🚀 Z-Node Active on ${config.port}`));
+  
+  app.listen(config.port, '0.0.0.0', () => {
+    console.log(`🚀 Z-Node [${config.isMasterNode ? 'MASTER' : 'COMMUNITY'}] Active on ${config.port}`);
+  });
 }
 
-bootstrap().catch(console.error);
+bootstrap().catch(err => {
+  console.error('Critical Bootstrap Error:', err);
+  process.exit(1);
+});
+
+export { prisma };
