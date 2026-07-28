@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Home, MessageSquare, LayoutGrid, User, Settings, Globe, Sun, Moon, ShieldAlert } from 'lucide-react-native';
 import { useTheme } from '../app/themeContext';
+import { APP_NAME } from '../app/config';
 import { router } from 'expo-router';
 
 interface SidebarProps {
@@ -36,13 +37,13 @@ export default function Sidebar({ activeTab, onTabPress, t, user }: SidebarProps
     <View style={[styles.sidebarWrapper, { backgroundColor: colors.bg, borderColor: colors.sidebarBorder }]}>
       <View style={[styles.card, { backgroundColor: colors.sidebarBg, borderColor: colors.cardBorder }]}>
         
-        {/* Z Logo Badge */}
-        <View style={styles.brandHeader}>
+        {/* Brand Logo Badge */}
+        <TouchableOpacity style={styles.brandHeader} onPress={() => onTabPress('feed')}>
           <View style={[styles.logoBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.logoBadgeText}>Z</Text>
+            <Text style={styles.logoBadgeText}>{APP_NAME}</Text>
           </View>
-          <Text style={[styles.brandTitle, { color: colors.text }]}>Z Network</Text>
-        </View>
+          <Text style={[styles.brandTitle, { color: colors.text }]}>{APP_NAME}</Text>
+        </TouchableOpacity>
 
         <View style={styles.list}>
           <NavItem id="feed" icon={Home} label={t.home} />
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     fontWeight: '900',
-    fontSize: 18,
+    fontSize: 20,
     letterSpacing: -0.5,
   },
   separator: {

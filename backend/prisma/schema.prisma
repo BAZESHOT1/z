@@ -26,27 +26,53 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @default(now()) @updatedAt
 
-  posts           Post[]     @relation("UserPosts")
-  likes           Like[]     @relation("UserLikes")
-  comments        Comment[]  @relation("UserComments")
-  followedBy      Follow[]   @relation("UserFollowedBy")
-  following       Follow[]   @relation("UserFollowing")
-  miniApps        MiniApp[]  @relation("UserMiniApps")
+  posts           Post[]          @relation("UserPosts")
+  likes           Like[]          @relation("UserLikes")
+  comments        Comment[]       @relation("UserComments")
+  followedBy      Follow[]        @relation("UserFollowedBy")
+  following       Follow[]        @relation("UserFollowing")
+  miniApps        MiniApp[]       @relation("UserMiniApps")
+  postViews       PostView[]      @relation("UserPostViews")
+  profileViews    ProfileView[]   @relation("UserProfileViews")
+  viewsReceived   ProfileView[]   @relation("UserViewsReceived")
 }
 
 model Post {
-  id         Int       @id @default(autoincrement())
+  id         Int        @id @default(autoincrement())
   content    String
   mediaUrl   String?
-  viewsCount Int       @default(0)
-  isEdited   Boolean   @default(false)
+  viewsCount Int        @default(0)
+  isEdited   Boolean    @default(false)
   authorId   Int
-  author     User      @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @default(now()) @updatedAt
+  author     User       @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @default(now()) @updatedAt
 
-  likes      Like[]    @relation("PostLikes")
-  comments   Comment[] @relation("PostComments")
+  likes      Like[]     @relation("PostLikes")
+  comments   Comment[]  @relation("PostComments")
+  views      PostView[] @relation("PostViews")
+}
+
+model PostView {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  userId    Int?
+  post      Post     @relation("PostViews", fields: [postId], references: [id], onDelete: Cascade)
+  user      User?    @relation("UserPostViews", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model ProfileView {
+  id        Int      @id @default(autoincrement())
+  viewerId  Int?
+  viewedId  Int
+  viewer    User?    @relation("UserProfileViews", fields: [viewerId], references: [id], onDelete: SetNull)
+  viewed    User     @relation("UserViewsReceived", fields: [viewedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([viewerId, viewedId])
 }
 
 model Like {

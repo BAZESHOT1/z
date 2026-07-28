@@ -1,4 +1,6 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://82.26.152.225:4000';
+import { API_URL as DEFAULT_API_URL } from './config';
+
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 let authToken: string | null = null;
 
@@ -69,6 +71,9 @@ export const deletePost = (postId: number) =>
 export const recordPostView = (postId: number) => 
   request(`/api/posts/${postId}/view`, { method: 'POST' });
 
+export const recordProfileView = (username: string) => 
+  request(`/api/users/${encodeURIComponent(username)}/view`, { method: 'POST' });
+
 export const toggleLike = (postId: number) => 
   request(`/api/posts/${postId}/like`, { method: 'POST' });
 
@@ -78,7 +83,7 @@ export const fetchComments = (postId: number) =>
 export const createComment = (postId: number, content: string) => 
   request(`/api/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
 
-// Safe user profile fetcher (returns null instead of throwing on 404)
+// Safe user profile fetcher
 export const fetchUserProfile = (username: string) => 
   request(`/api/users/${encodeURIComponent(username)}`).catch(() => null);
 
@@ -94,7 +99,7 @@ export const fetchFollowers = (username: string) =>
 export const fetchFollowing = (username: string) => 
   request(`/api/users/${encodeURIComponent(username)}/following`).then(res => res || []);
 
-// Telegram-style Mini Apps API
+// Mini Apps API
 export const fetchMiniApps = () => request('/api/apps').then(res => res || []);
 export const createMiniApp = (data: { title: string, description: string, url: string, icon?: string }) => 
   request('/api/apps', { method: 'POST', body: JSON.stringify(data) });

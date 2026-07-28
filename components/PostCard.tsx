@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { Heart, MessageSquare, Share2, MoreHorizontal, Edit3, Trash2, Eye, Send, X, Save, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -41,7 +41,6 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
   const isAdmin = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'ROOT');
 
   useEffect(() => {
-    // Record view once on render
     recordPostView(post.id).then((res) => {
       if (res && res.viewsCount !== undefined) {
         setViewsCount(res.viewsCount);
@@ -50,12 +49,21 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
   }, [post.id]);
 
   const handleLike = async () => {
+    if (!currentUser) {
+      router.push('/auth/login');
+      return;
+    }
+
     const nextState = !isLiked;
     setIsLiked(nextState);
     setLikesCount(prev => prev + (nextState ? 1 : -1));
 
     try {
-      await toggleLike(post.id);
+      const res = await toggleLike(post.id);
+      if (res && res.count !== undefined) {
+        setLikesCount(res.count);
+        setIsLiked(res.liked);
+      }
     } catch (e) {
       setIsLiked(!nextState);
       setLikesCount(prev => prev + (nextState ? -1 : 1));
@@ -76,6 +84,10 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
   };
 
   const handleAddComment = async () => {
+    if (!currentUser) {
+      router.push('/auth/login');
+      return;
+    }
     if (!commentText.trim()) return;
     setSubmitting(true);
     try {
@@ -278,7 +290,7 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
       {/* Expandable Comments Container */}
       {showComments && (
         <View style={[styles.commentsBox, { backgroundColor: colors.commentBg, borderColor: colors.cardBorder }]}>
-          {currentUser && (
+          {currentUser ? (
             <View style={styles.addCommentRow}>
               <TextInput
                 style={[styles.commentInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
@@ -291,6 +303,10 @@ export default function PostCard({ post, currentUser, t, onShare, onPostDeleted,
                 {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={14} color="#fff" />}
               </TouchableOpacity>
             </View>
+          ) : (
+            <TouchableOpacity style={styles.loginToCommentBox} onPress={() => router.push('/auth/login')}>
+              <Text style={[styles.loginToCommentText, { color: colors.primary }]}>Войдите, чтобы оставить комментарий</Text>
+            </TouchableOpacity>
           )}
 
           {loadingComments ? (
@@ -337,7 +353,7 @@ const styles = StyleSheet.create({
   contentArea: { gap: 10, marginBottom: 14 },
   postText: { fontSize: 15, lineHeight: 22 },
   editedBadge: { fontSize: 11, fontStyle: 'italic' },
-  mediaImage: { width: '100%', height: 260, borderRadius: 14, marginTop: 6 },
+  mediaImage: { width: '100%', height: 280, borderRadius: 14, marginTop: 6 },
   actionsBar: { flexDirection: 'row', alignItems: 'center', gap: 24, paddingTop: 12, borderTopWidth: 1 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   actionVal: { fontSize: 13, fontWeight: '700' },
@@ -350,6 +366,8 @@ const styles = StyleSheet.create({
   addCommentRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   commentInput: { flex: 1, height: 36, borderRadius: 18, paddingHorizontal: 14, borderWidth: 1, fontSize: 13 },
   sendCommentBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  loginToCommentBox: { padding: 10, borderRadius: 10, alignItems: 'center' },
+  loginToCommentText: { fontWeight: '700', fontSize: 13 },
   emptyComments: { textAlign: 'center', fontSize: 12, marginVertical: 6 },
   commentRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   commentAvatar: { width: 28, height: 28, borderRadius: 14 },

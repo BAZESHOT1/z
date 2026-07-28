@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { ArrowLeft, Globe, LogOut, Sun, Moon, ShieldAlert, Key } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -9,6 +9,9 @@ import { setAuthToken, fetchCurrentUser, updateProfile, becomeAdmin } from './ap
 
 export default function SettingsScreen() {
   const { colors, theme, toggleTheme, lang, setLanguage } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -21,9 +24,14 @@ export default function SettingsScreen() {
   const loadSettings = async () => {
     try {
       const data = await fetchCurrentUser();
+      if (!data) {
+        router.replace('/auth/login');
+        return;
+      }
       setUser(data);
     } catch (e) {
       console.error(e);
+      router.replace('/auth/login');
     } finally {
       setLoading(false);
     }
@@ -88,90 +96,93 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
-      <View style={[styles.header, { borderColor: colors.cardBorder }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color={colors.text} size={22} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>{t.settings}</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        
-        {/* Testing Privilege Escalation Button */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Права доступа и роль</Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          {isAdmin ? (
-            <TouchableOpacity style={styles.row} onPress={() => router.push('/admin')}>
-              <View style={styles.rowLeft}>
-                <ShieldAlert color="#ef4444" size={20} />
-                <Text style={[styles.rowText, { color: '#ef4444' }]}>{t.adminPanel}</Text>
-              </View>
-              <Text style={[styles.valText, { color: '#238636' }]}>{user.role}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.row} onPress={handleBecomeAdmin} disabled={adminLoading}>
-              <View style={styles.rowLeft}>
-                <Key color={colors.primary} size={20} />
-                <Text style={[styles.rowText, { color: colors.text }]}>{t.becomeAdmin}</Text>
-              </View>
-              {adminLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={[styles.valText, { color: colors.primary }]}>ROLE: {user.role}</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t.systemSettings}</Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          <TouchableOpacity style={styles.row} onPress={toggleTheme}>
-            <View style={styles.rowLeft}>
-              {theme === 'dark' ? <Sun color="#fbbf24" size={20} /> : <Moon color="#6366f1" size={20} />}
-              <Text style={[styles.rowText, { color: colors.text }]}>{t.theme}</Text>
-            </View>
-            <Text style={[styles.valText, { color: colors.primary }]}>
-              {theme === 'dark' ? t.darkTheme : t.lightTheme}
-            </Text>
+      <View style={[styles.pageWrapper, isDesktop && styles.desktopWrapper]}>
+        <View style={[styles.header, { borderColor: colors.cardBorder }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft color={colors.text} size={22} />
           </TouchableOpacity>
-
-          <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
-
-          <TouchableOpacity style={styles.row} onPress={toggleLanguage}>
-            <View style={styles.rowLeft}>
-              <Globe color={colors.textSecondary} size={20} />
-              <Text style={[styles.rowText, { color: colors.text }]}>{t.language}</Text>
-            </View>
-            <Text style={[styles.valText, { color: colors.primary }]}>
-              {lang === 'ru' ? 'Русский' : 'English'}
-            </Text>
-          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>{t.settings}</Text>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t.privacySettings}</Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          <PrivacyRow label={t.privacyProfile} field="privacyProfile" />
-          <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
-          <PrivacyRow label={t.privacyMessages} field="privacyMessages" />
-          <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
-          <PrivacyRow label={t.privacyPosts} field="privacyPosts" />
-        </View>
-
-        <TouchableOpacity style={[styles.card, styles.logoutCard]} onPress={handleLogout}>
-          <View style={styles.row}>
-            <View style={styles.rowLeft}>
-              <LogOut color="#f85149" size={20} />
-              <Text style={[styles.rowText, { color: '#f85149' }]}>{t.signOut}</Text>
-            </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Права доступа и роль</Text>
+          <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            {isAdmin ? (
+              <TouchableOpacity style={styles.row} onPress={() => router.push('/admin')}>
+                <View style={styles.rowLeft}>
+                  <ShieldAlert color="#ef4444" size={20} />
+                  <Text style={[styles.rowText, { color: '#ef4444' }]}>{t.adminPanel}</Text>
+                </View>
+                <Text style={[styles.valText, { color: '#238636' }]}>{user.role}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.row} onPress={handleBecomeAdmin} disabled={adminLoading}>
+                <View style={styles.rowLeft}>
+                  <Key color={colors.primary} size={20} />
+                  <Text style={[styles.rowText, { color: colors.text }]}>{t.becomeAdmin}</Text>
+                </View>
+                {adminLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={[styles.valText, { color: colors.primary }]}>ROLE: {user.role}</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-        </TouchableOpacity>
-      </ScrollView>
+
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t.systemSettings}</Text>
+          <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            <TouchableOpacity style={styles.row} onPress={toggleTheme}>
+              <View style={styles.rowLeft}>
+                {theme === 'dark' ? <Sun color="#fbbf24" size={20} /> : <Moon color="#6366f1" size={20} />}
+                <Text style={[styles.rowText, { color: colors.text }]}>{t.theme}</Text>
+              </View>
+              <Text style={[styles.valText, { color: colors.primary }]}>
+                {theme === 'dark' ? t.darkTheme : t.lightTheme}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
+
+            <TouchableOpacity style={styles.row} onPress={toggleLanguage}>
+              <View style={styles.rowLeft}>
+                <Globe color={colors.textSecondary} size={20} />
+                <Text style={[styles.rowText, { color: colors.text }]}>{t.language}</Text>
+              </View>
+              <Text style={[styles.valText, { color: colors.primary }]}>
+                {lang === 'ru' ? 'Русский' : 'English'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t.privacySettings}</Text>
+          <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            <PrivacyRow label={t.privacyProfile} field="privacyProfile" />
+            <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
+            <PrivacyRow label={t.privacyMessages} field="privacyMessages" />
+            <View style={[styles.divider, { backgroundColor: colors.subtleBorder }]} />
+            <PrivacyRow label={t.privacyPosts} field="privacyPosts" />
+          </View>
+
+          <TouchableOpacity style={[styles.card, styles.logoutCard]} onPress={handleLogout}>
+            <View style={styles.row}>
+              <View style={styles.rowLeft}>
+                <LogOut color="#f85149" size={20} />
+                <Text style={[styles.rowText, { color: '#f85149' }]}>{t.signOut}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  pageWrapper: { flex: 1, width: '100%', maxWidth: 580, alignSelf: 'center' },
+  desktopWrapper: { paddingVertical: 12 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16, borderBottomWidth: 1 },
   backBtn: { padding: 4 },

@@ -36,6 +36,7 @@ export default function AdminScreen() {
       }
     } catch (e: any) {
       console.error(e);
+      router.replace('/');
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,6 @@ export default function AdminScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Header */}
       <View style={[styles.header, { borderColor: colors.cardBorder }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <ArrowLeft color={colors.text} size={22} />
@@ -80,143 +80,143 @@ export default function AdminScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        
-        {/* Top Summary Badges */}
-        <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Users color={colors.primary} size={20} />
-            <Text style={[styles.statVal, { color: colors.text }]}>{stats?.usersCount || users.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.usersCount}</Text>
+      <ScrollView contentContainerStyle={[styles.content, isDesktop && styles.desktopContent]}>
+        <View style={styles.adminPageInner}>
+          {/* Top Summary Badges */}
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <Users color={colors.primary} size={20} />
+              <Text style={[styles.statVal, { color: colors.text }]}>{stats?.usersCount || users.length}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.usersCount}</Text>
+            </View>
+
+            <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <Server color="#238636" size={20} />
+              <Text style={[styles.statVal, { color: colors.text }]}>{stats?.nodes?.length || 3}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.nodesStatus}</Text>
+            </View>
+
+            <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <Database color="#eab308" size={20} />
+              <Text style={[styles.statVal, { color: colors.text }]}>ONLINE</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.dbHealth}</Text>
+            </View>
           </View>
 
-          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Server color="#238636" size={20} />
-            <Text style={[styles.statVal, { color: colors.text }]}>{stats?.nodes?.length || 3}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.nodesStatus}</Text>
-          </View>
-
-          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Database color="#eab308" size={20} />
-            <Text style={[styles.statVal, { color: colors.text }]}>ONLINE</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.dbHealth}</Text>
-          </View>
-        </View>
-
-        {/* Real Node Inspector Section */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-          Монитор нод бэкенда (Master & Community Cluster)
-        </Text>
-        
-        <View style={styles.nodesLayout}>
-          {/* Left Column: Node Cards List */}
-          <View style={styles.nodesList}>
-            {(stats?.nodes || []).map((node: any) => {
-              const isSelected = node.id === selectedNodeId;
-              return (
-                <TouchableOpacity
-                  key={node.id}
-                  style={[
-                    styles.nodeSelectorCard,
-                    { backgroundColor: colors.cardBg, borderColor: isSelected ? colors.primary : colors.cardBorder },
-                    isSelected && { borderLeftWidth: 4, borderLeftColor: colors.primary }
-                  ]}
-                  onPress={() => setSelectedNodeId(node.id)}
-                >
-                  <View style={styles.nodeHeaderRow}>
-                    <Server size={16} color={node.type === 'MASTER' ? '#ef4444' : '#238636'} />
-                    <Text style={[styles.nodeTitle, { color: colors.text }]}>{node.name}</Text>
-                    <View style={styles.onlineBadge}>
-                      <View style={styles.onlineDot} />
-                      <Text style={styles.onlineText}>{node.pingMs}ms</Text>
+          {/* Real Node Inspector Section */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Монитор нод бэкенда (Master & Community Cluster)
+          </Text>
+          
+          <View style={[styles.nodesLayout, isDesktop && styles.desktopNodesLayout]}>
+            {/* Left Column: Node Cards List */}
+            <View style={[styles.nodesList, isDesktop && { flex: 1 }]}>
+              {(stats?.nodes || []).map((node: any) => {
+                const isSelected = node.id === selectedNodeId;
+                return (
+                  <TouchableOpacity
+                    key={node.id}
+                    style={[
+                      styles.nodeSelectorCard,
+                      { backgroundColor: colors.cardBg, borderColor: isSelected ? colors.primary : colors.cardBorder },
+                      isSelected && { borderLeftWidth: 4, borderLeftColor: colors.primary }
+                    ]}
+                    onPress={() => setSelectedNodeId(node.id)}
+                  >
+                    <View style={styles.nodeHeaderRow}>
+                      <Server size={16} color={node.type === 'MASTER' ? '#ef4444' : '#238636'} />
+                      <Text style={[styles.nodeTitle, { color: colors.text }]}>{node.name}</Text>
+                      <View style={styles.onlineBadge}>
+                        <View style={styles.onlineDot} />
+                        <Text style={styles.onlineText}>{node.pingMs}ms</Text>
+                      </View>
                     </View>
+                    
+                    <Text style={[styles.nodeUrl, { color: colors.textSecondary }]}>{node.url}</Text>
+                    
+                    <View style={styles.nodeMetricsRow}>
+                      <Text style={[styles.metricChip, { color: colors.textSecondary }]}>RAM: {node.memoryUsage}</Text>
+                      <Text style={[styles.metricChip, { color: colors.textSecondary }]}>Uptime: {node.uptime}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Right Column: Active Selected Node Detail & Live Terminal Logs */}
+            {selectedNode && (
+              <View style={[styles.nodeDetailCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }, isDesktop && { flex: 1.5 }]}>
+                <View style={styles.detailHeader}>
+                  <Terminal size={18} color={colors.primary} />
+                  <Text style={[styles.detailTitle, { color: colors.text }]}>
+                    Журнал ноды: {selectedNode.name}
+                  </Text>
+                </View>
+
+                <View style={styles.detailStatsRow}>
+                  <View style={styles.detailStatBox}>
+                    <Cpu size={14} color={colors.textSecondary} />
+                    <Text style={[styles.detailStatText, { color: colors.text }]}>CPU: {selectedNode.cpuUsage}</Text>
                   </View>
-                  
-                  <Text style={[styles.nodeUrl, { color: colors.textSecondary }]}>{node.url}</Text>
-                  
-                  <View style={styles.nodeMetricsRow}>
-                    <Text style={[styles.metricChip, { color: colors.textSecondary }]}>RAM: {node.memoryUsage}</Text>
-                    <Text style={[styles.metricChip, { color: colors.textSecondary }]}>Uptime: {node.uptime}</Text>
+                  <View style={styles.detailStatBox}>
+                    <HardDrive size={14} color={colors.textSecondary} />
+                    <Text style={[styles.detailStatText, { color: colors.text }]}>Memory: {selectedNode.memoryUsage}</Text>
                   </View>
-                </TouchableOpacity>
-              );
-            })}
+                  <View style={styles.detailStatBox}>
+                    <CheckCircle size={14} color="#238636" />
+                    <Text style={[styles.detailStatText, { color: '#238636' }]}>{selectedNode.dbStatus}</Text>
+                  </View>
+                </View>
+
+                {/* Terminal Logs Output */}
+                <View style={styles.terminalBox}>
+                  <Text style={styles.terminalHeader}>=== LIVE SYSTEM LOGS ({selectedNode.id}) ===</Text>
+                  {(selectedNode.logs || []).map((log: string, idx: number) => (
+                    <Text key={idx} style={styles.terminalLine}>{log}</Text>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
 
-          {/* Right Column: Active Selected Node Detail & Live Terminal Logs */}
-          {selectedNode && (
-            <View style={[styles.nodeDetailCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-              <View style={styles.detailHeader}>
-                <Terminal size={18} color={colors.primary} />
-                <Text style={[styles.detailTitle, { color: colors.text }]}>
-                  Журнал ноды: {selectedNode.name}
-                </Text>
-              </View>
+          {/* User Roles Management */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Управление пользователями и правами (База Данных)
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            {users.map((u) => (
+              <View key={u.id} style={[styles.userRow, { borderBottomColor: colors.subtleBorder }]}>
+                <Image source={{ uri: getAvatarUrl(u.username, u.avatar) }} style={styles.rowAvatar} />
+                
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowName, { color: colors.text }]}>
+                    {u.firstName || u.username} {u.lastName || ''}
+                  </Text>
 
-              <View style={styles.detailStatsRow}>
-                <View style={styles.detailStatBox}>
-                  <Cpu size={14} color={colors.textSecondary} />
-                  <Text style={[styles.detailStatText, { color: colors.text }]}>CPU: {selectedNode.cpuUsage}</Text>
+                  <View style={styles.rowMetaLine}>
+                    <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>@{u.username}</Text>
+                    <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>• {u.email}</Text>
+                  </View>
                 </View>
-                <View style={styles.detailStatBox}>
-                  <HardDrive size={14} color={colors.textSecondary} />
-                  <Text style={[styles.detailStatText, { color: colors.text }]}>Memory: {selectedNode.memoryUsage}</Text>
-                </View>
-                <View style={styles.detailStatBox}>
-                  <CheckCircle size={14} color="#238636" />
-                  <Text style={[styles.detailStatText, { color: '#238636' }]}>{selectedNode.dbStatus}</Text>
-                </View>
-              </View>
 
-              {/* Terminal Logs Output */}
-              <View style={styles.terminalBox}>
-                <Text style={styles.terminalHeader}>=== LIVE SYSTEM LOGS ({selectedNode.id}) ===</Text>
-                {(selectedNode.logs || []).map((log: string, idx: number) => (
-                  <Text key={idx} style={styles.terminalLine}>{log}</Text>
-                ))}
+                <TouchableOpacity 
+                  style={[
+                    styles.roleBadge, 
+                    { backgroundColor: u.role === 'ROOT' ? '#f85149' : u.role === 'ADMIN' ? '#238636' : colors.cardBorder }
+                  ]}
+                  onPress={() => handleRoleChange(u.id, u.role)}
+                  disabled={updatingUser === u.id}
+                >
+                  {updatingUser === u.id ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.roleBadgeText}>{u.role}</Text>
+                  )}
+                </TouchableOpacity>
               </View>
-            </View>
-          )}
+            ))}
+          </View>
         </View>
-
-        {/* User Roles Management */}
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-          Управление пользователями и правами (База Данных)
-        </Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          {users.map((u) => (
-            <View key={u.id} style={[styles.userRow, { borderBottomColor: colors.subtleBorder }]}>
-              <Image source={{ uri: getAvatarUrl(u.username, u.avatar) }} style={styles.rowAvatar} />
-              
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rowName, { color: colors.text }]}>
-                  {u.firstName || u.username} {u.lastName || ''}
-                </Text>
-
-                <View style={styles.rowMetaLine}>
-                  <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>@{u.username}</Text>
-                  <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>• {u.email}</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity 
-                style={[
-                  styles.roleBadge, 
-                  { backgroundColor: u.role === 'ROOT' ? '#f85149' : u.role === 'ADMIN' ? '#238636' : colors.cardBorder }
-                ]}
-                onPress={() => handleRoleChange(u.id, u.role)}
-                disabled={updatingUser === u.id}
-              >
-                {updatingUser === u.id ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.roleBadgeText}>{u.role}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -230,12 +230,15 @@ const styles = StyleSheet.create({
   refreshBtn: { marginLeft: 'auto', padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '800' },
   content: { padding: 20, gap: 14 },
+  desktopContent: { alignItems: 'center' },
+  adminPageInner: { maxWidth: 900, width: '100%', gap: 14 },
   sectionTitle: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10 },
   statsGrid: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, padding: 14, borderRadius: 16, borderWidth: 1, gap: 4, alignItems: 'flex-start' },
   statVal: { fontSize: 18, fontWeight: '900' },
   statLabel: { fontSize: 11, fontWeight: '600' },
   nodesLayout: { gap: 12 },
+  desktopNodesLayout: { flexDirection: 'row', alignItems: 'flex-start' },
   nodesList: { gap: 8 },
   nodeSelectorCard: { padding: 12, borderRadius: 14, borderWidth: 1, gap: 6 },
   nodeHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

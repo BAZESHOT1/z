@@ -294,13 +294,15 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
     const currentUserId = req.user?.id;
     const isSelf = currentUserId === user.id;
 
-    // Check DB Followers & Following count safely
     let followersCount = 0;
     let followingCount = 0;
+    let profileViewsCount = 0;
+
     try {
-      [followersCount, followingCount] = await Promise.all([
+      [followersCount, followingCount, profileViewsCount] = await Promise.all([
         (prisma as any).follow.count({ where: { followingId: user.id } }),
-        (prisma as any).follow.count({ where: { followerId: user.id } })
+        (prisma as any).follow.count({ where: { followerId: user.id } }),
+        (prisma as any).profileView.count({ where: { viewedId: user.id } })
       ]);
     } catch (e) {}
 
@@ -314,7 +316,6 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
       } catch (e) {}
     }
 
-    // Check Privacy Access
     let isRestricted = false;
     if (!isSelf) {
       if (user.privacyProfile === 'NOBODY') {
@@ -334,6 +335,7 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
         role: user.role,
         isRestricted: true,
         isFollowing,
+        profileViewsCount,
         _count: { posts: 0, followers: followersCount, following: followingCount }
       });
     }
@@ -342,10 +344,43 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
       ...user, 
       isFollowing,
       isRestricted: false,
+      profileViewsCount,
       _count: { posts: 0, followers: followersCount, following: followingCount } 
     });
   } catch (e: any) {
     res.status(500).json({ error: 'Error fetching profile' });
+  }
+});
+
+// Record unique profile view
+app.post('/api/users/:username/view', optionalAuth, async (req: any, res) => {
+  try {
+    const targetUsername = req.params.username;
+    const viewerId = req.user?.id || null;
+
+    const viewedUser = await prisma.user.findFirst({
+      where: { username: { equals: targetUsername, mode: 'insensitive' } }
+    });
+
+    if (!viewedUser) return res.status(404).json({ error: 'User not found' });
+
+    if (viewerId && viewerId === viewedUser.id) {
+      const count = await (prisma as any).profileView.count({ where: { viewedId: viewedUser.id } });
+      return res.json({ profileViewsCount: count });
+    }
+
+    if (viewerId) {
+      try {
+        await (prisma as any).profileView.create({
+          data: { viewerId, viewedId: viewedUser.id }
+        });
+      } catch (e) {}
+    }
+
+    const profileViewsCount = await (prisma as any).profileView.count({ where: { viewedId: viewedUser.id } });
+    res.json({ profileViewsCount });
+  } catch (e) {
+    res.json({ profileViewsCount: 0 });
   }
 });
 
@@ -451,13 +486,13 @@ app.post('/api/users/update', authenticate, async (req: any, res) => {
   }
 });
 
-// Helper for fetching safe likes & comments count without Prisma include relation errors
 async function enrichPostsWithStats(posts: any[], currentUser: any) {
   const postIds = posts.map(p => p.id);
   if (postIds.length === 0) return [];
 
   const likesMap: Record<number, number> = {};
   const commentsMap: Record<number, number> = {};
+  const viewsMap: Record<number, number> = {};
   const userLikedSet = new Set<number>();
 
   try {
@@ -483,11 +518,21 @@ async function enrichPostsWithStats(posts: any[], currentUser: any) {
     }
   } catch (e) {}
 
+  try {
+    const views = await (prisma as any).postView.findMany({
+      where: { postId: { in: postIds } },
+      select: { postId: true }
+    });
+    for (const v of views) {
+      viewsMap[v.postId] = (viewsMap[v.postId] || 0) + 1;
+    }
+  } catch (e) {}
+
   return posts.map(p => ({
     id: p.id,
     content: p.content,
     mediaUrl: p.mediaUrl,
-    viewsCount: p.viewsCount,
+    viewsCount: viewsMap[p.id] || p.viewsCount || 0,
     isEdited: p.isEdited,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
@@ -614,20 +659,28 @@ app.delete('/api/posts/:id', authenticate, async (req: any, res) => {
   }
 });
 
-app.post('/api/posts/:id/view', async (req, res) => {
+// Record unique post view
+app.post('/api/posts/:id/view', optionalAuth, async (req: any, res) => {
   try {
     const postId = parseInt(req.params.id);
-    const updated = await prisma.post.update({
-      where: { id: postId },
-      data: { viewsCount: { increment: 1 } }
-    });
-    res.json({ viewsCount: updated.viewsCount });
+    const userId = req.user?.id || null;
+
+    if (userId) {
+      try {
+        await (prisma as any).postView.create({
+          data: { postId, userId }
+        });
+      } catch (e) {}
+    }
+
+    const viewsCount = await (prisma as any).postView.count({ where: { postId } });
+    res.json({ viewsCount });
   } catch (e) {
     res.json({ viewsCount: 0 });
   }
 });
 
-// Like Toggle in PostgreSQL Database
+// Like Toggle in PostgreSQL Database (Strict Auth Required)
 app.post('/api/posts/:id/like', authenticate, async (req: any, res) => {
   try {
     const postId = parseInt(req.params.id);
@@ -672,6 +725,7 @@ app.get('/api/posts/:id/comments', async (req, res) => {
   }
 });
 
+// Strict Auth Required for Comment
 app.post('/api/posts/:id/comments', authenticate, async (req: any, res) => {
   try {
     const postId = parseInt(req.params.id);

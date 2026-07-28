@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeInDown, FadeInUp, Layout } from 'react-native-reanimated';
 import { loginUser, setAuthToken } from '../api';
+import { APP_NAME } from '../config';
 
 export default function LoginScreen() {
   const [form, setForm] = useState({ username: '', password: '' });
@@ -41,9 +42,9 @@ export default function LoginScreen() {
 
           <View style={styles.logoArea}>
             <View style={styles.logoBox}>
-              <Text style={styles.zLogoText}>Z</Text>
+              <Text style={styles.zLogoText}>{APP_NAME}</Text>
             </View>
-            <Text style={styles.welcomeTitle}>Вход в Z Network</Text>
+            <Text style={styles.welcomeTitle}>Вход в {APP_NAME}</Text>
             <Text style={styles.welcomeSub}>Введите свои данные для доступа к сети</Text>
           </View>
 
@@ -90,27 +91,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0d1117' },
   bgGlow: { position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: 'rgba(37, 99, 235, 0.08)' } as any,
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 420, backgroundColor: '#161b22', borderRadius: 20, padding: 32, borderWidth: 1, borderColor: '#30363d' },
-  desktopCard: { padding: 40 },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 20, padding: 8 },
-  logoArea: { alignItems: 'center', marginBottom: 32 },
-  logoBox: { width: 60, height: 60, borderRadius: 16, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  zLogoText: { color: '#fff', fontSize: 32, fontWeight: '900' },
-  welcomeTitle: { color: '#f0f6fc', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  welcomeSub: { color: '#8b949e', fontSize: 14, marginTop: 4, textAlign: 'center' },
+  card: { width: '100%', maxWidth: 400, backgroundColor: '#161b22', borderRadius: 20, padding: 28, borderWidth: 1, borderColor: '#30363d' },
+  desktopCard: { padding: 32 },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 16, padding: 4 },
+  logoArea: { alignItems: 'center', marginBottom: 28 },
+  logoBox: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  zLogoText: { color: '#fff', fontSize: 28, fontWeight: '900' },
+  welcomeTitle: { color: '#f0f6fc', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  welcomeSub: { color: '#8b949e', fontSize: 13, marginTop: 4, textAlign: 'center' },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(248, 81, 73, 0.1)', padding: 12, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(248, 81, 73, 0.2)' },
   errorText: { color: '#f85149', fontSize: 13 },
-  form: { gap: 20 },
-  inputWrapper: { gap: 8 },
-  inputLabel: { color: '#f0f6fc', fontSize: 14, fontWeight: '600', marginLeft: 2 },
-  field: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 10, borderWidth: 1, borderColor: '#30363d', height: 46, paddingHorizontal: 12 },
+  form: { gap: 18 },
+  inputWrapper: { gap: 6 },
+  inputLabel: { color: '#f0f6fc', fontSize: 13, fontWeight: '600', marginLeft: 2 },
+  field: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1117', borderRadius: 10, borderWidth: 1, borderColor: '#30363d', height: 44, paddingHorizontal: 12 },
   fieldIcon: { marginRight: 10 },
   input: { flex: 1, color: '#f0f6fc', fontSize: 14 },
-  mainBtn: { backgroundColor: '#2563eb', height: 46, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  mainBtn: { backgroundColor: '#2563eb', height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   mainBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 8 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
   line: { flex: 1, height: 1, backgroundColor: '#30363d' },
-  dividerText: { color: '#484f58', fontSize: 12, fontWeight: '600' },
-  secondaryBtn: { height: 46, borderRadius: 10, borderWidth: 1, borderColor: '#30363d', justifyContent: 'center', alignItems: 'center', backgroundColor: '#21262d' },
+  dividerText: { color: '#484f58', fontSize: 11, fontWeight: '600' },
+  secondaryBtn: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: '#30363d', justifyContent: 'center', alignItems: 'center', backgroundColor: '#21262d' },
   secondaryBtnText: { color: '#c9d1d9', fontWeight: '600', fontSize: 14 }
 });

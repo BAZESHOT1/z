@@ -8,6 +8,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { translations } from './i18n';
 import { useTheme } from './themeContext';
 import { fetchCurrentUser, fetchFeedPosts, setAuthToken, createPost, getAvatarUrl } from './api';
+import { APP_NAME } from './config';
 import Sidebar from '../components/Sidebar';
 import Dock from '../components/Dock';
 import PostCard from '../components/PostCard';
@@ -16,7 +17,7 @@ import ShareSheet from '../components/ShareSheet';
 export default function MainApp() {
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
-  const { colors, theme, toggleTheme, lang, setLanguage } = useTheme();
+  const { colors, theme, toggleTheme, lang } = useTheme();
   
   const [activeTab, setActiveTab] = useState<'feed' | 'chats' | 'apps' | 'profile'>('feed');
   const [user, setUser] = useState<any>(null);
@@ -82,7 +83,11 @@ export default function MainApp() {
   };
 
   const handleCreatePost = async () => {
-    if (!newPost.trim() || !user) return;
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+    if (!newPost.trim()) return;
     setPosting(true);
     try {
       const created = await createPost(newPost, mediaUrl.trim() || undefined);
@@ -102,7 +107,10 @@ export default function MainApp() {
   const handleTabPress = (tab: any) => {
     if (tab === 'login') { router.push('/auth/login'); return; }
     if (tab === 'settings') { router.push('/settings'); return; }
-    if ((tab === 'profile' || tab === 'chats') && !user) { router.push('/auth/login'); return; }
+    if ((tab === 'profile' || tab === 'chats') && !user) { 
+      router.push('/auth/login'); 
+      return; 
+    }
     if (tab === 'profile') { router.push(`/profile/${user.username}`); return; }
     setActiveTab(tab);
   };
@@ -125,13 +133,13 @@ export default function MainApp() {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
-            <View style={styles.page}>
+            <View style={[styles.page, isDesktop && styles.desktopPage]}>
               
               {/* Header */}
               <View style={[styles.feedHeader, { borderColor: colors.cardBorder }]}>
                 <View style={styles.headerLeft}>
                   <View style={[styles.zBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.zBadgeText}>Z</Text>
+                    <Text style={styles.zBadgeText}>{APP_NAME}</Text>
                   </View>
                   <Text style={[styles.feedTitle, { color: colors.text }]}>{t.home}</Text>
                 </View>
@@ -261,6 +269,7 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   scroll: { flex: 1 },
   page: { padding: 16, maxWidth: 640, alignSelf: 'center', width: '100%', paddingBottom: 100 },
+  desktopPage: { paddingVertical: 24 },
   feedHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   zBadge: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image, ScrollView, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput, useWindowDimensions, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon, AlertCircle, Lock, Shield } from 'lucide-react-native';
+import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon, AlertCircle, Lock, Eye } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow, setAuthToken, getAvatarUrl, fetchFollowers, fetchFollowing } from '../api';
+import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow, setAuthToken, getAvatarUrl, fetchFollowers, fetchFollowing, recordProfileView } from '../api';
 import { translations } from '../i18n';
 import { useTheme } from '../themeContext';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -51,6 +51,15 @@ export default function ProfileScreen() {
 
       setUser(profileData);
       setCurrentUser(currentData);
+
+      // Record profile view
+      if (username) {
+        recordProfileView(username as string).then(res => {
+          if (res && res.profileViewsCount !== undefined && profileData) {
+            setUser((prev: any) => prev ? { ...prev, profileViewsCount: res.profileViewsCount } : prev);
+          }
+        }).catch(() => {});
+      }
 
       if (profileData && !profileData.isRestricted) {
         const postsData = await fetchPosts(username as string);
@@ -118,7 +127,7 @@ export default function ProfileScreen() {
 
   const dockItems = [
     { id: 'feed', icon: <Home size={20} color={colors.textSecondary} />, label: t.home, onClick: () => router.push('/') },
-    { id: 'chats', icon: <MessageSquare size={20} color={colors.textSecondary} />, label: t.chats, onClick: () => router.push('/') },
+    { id: 'chats', icon: <MessageSquare size={20} color={colors.textSecondary} />, label: t.chats, onClick: () => router.push(currentUser ? '/' : '/auth/login') },
     { id: 'apps', icon: <LayoutGrid size={20} color={colors.textSecondary} />, label: t.apps, onClick: () => router.push('/') },
     { id: 'profile', icon: <UserIcon size={20} color={isOwnProfile ? "#fff" : colors.textSecondary} />, label: t.profile, onClick: () => router.push(currentUser ? `/profile/${currentUser.username}` : '/auth/login') },
   ];
@@ -150,6 +159,9 @@ export default function ProfileScreen() {
               if (tab === 'profile') {
                 if (currentUser) router.push(`/profile/${currentUser.username}`);
                 else router.push('/auth/login');
+              } else if (tab === 'chats') {
+                if (currentUser) router.push('/');
+                else router.push('/auth/login');
               } else {
                 router.push('/');
               }
@@ -160,157 +172,166 @@ export default function ProfileScreen() {
         )}
 
         <View style={styles.content}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            
-            {/* Top Bar */}
-            <View style={[styles.header, { borderColor: colors.cardBorder }]}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-                <ArrowLeft color={colors.text} size={22} />
-              </TouchableOpacity>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>@{user.username}</Text>
-              {isOwnProfile ? (
-                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}>
-                  <Settings color={colors.text} size={22} />
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, isDesktop && styles.desktopScrollContent]}>
+            <View style={styles.pageInner}>
+              {/* Top Bar */}
+              <View style={[styles.header, { borderColor: colors.cardBorder }]}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+                  <ArrowLeft color={colors.text} size={22} />
                 </TouchableOpacity>
-              ) : <View style={{ width: 40 }} />}
-            </View>
-
-            {/* Profile Card */}
-            <Animated.View entering={FadeIn} style={[styles.profileCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-              <View style={styles.avatarWrapper}>
-                <Image source={{ uri: getAvatarUrl(user.username, editForm.avatar || user.avatar) }} style={[styles.avatar, { borderColor: colors.primary }]} />
+                <Text style={[styles.headerTitle, { color: colors.text }]}>@{user.username}</Text>
+                {isOwnProfile ? (
+                  <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}>
+                    <Settings color={colors.text} size={22} />
+                  </TouchableOpacity>
+                ) : <View style={{ width: 40 }} />}
               </View>
-              
-              {editing ? (
-                <View style={styles.editForm}>
-                  <TextInput 
-                    style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
-                    placeholder="Avatar URL (https://...)" 
-                    placeholderTextColor={colors.textSecondary} 
-                    value={editForm.avatar} 
-                    onChangeText={v => setEditForm({...editForm, avatar: v})} 
-                  />
-                  <View style={styles.inputRow}>
+
+              {/* Profile Card */}
+              <Animated.View entering={FadeIn} style={[styles.profileCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                <View style={styles.avatarWrapper}>
+                  <Image source={{ uri: getAvatarUrl(user.username, editForm.avatar || user.avatar) }} style={[styles.avatar, { borderColor: colors.primary }]} />
+                </View>
+                
+                {editing ? (
+                  <View style={styles.editForm}>
                     <TextInput 
-                      style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
-                      placeholder={t.firstName} 
+                      style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
+                      placeholder="Avatar URL (https://...)" 
                       placeholderTextColor={colors.textSecondary} 
-                      value={editForm.firstName} 
-                      onChangeText={v => setEditForm({...editForm, firstName: v})} 
+                      value={editForm.avatar} 
+                      onChangeText={v => setEditForm({...editForm, avatar: v})} 
                     />
+                    <View style={styles.inputRow}>
+                      <TextInput 
+                        style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
+                        placeholder={t.firstName} 
+                        placeholderTextColor={colors.textSecondary} 
+                        value={editForm.firstName} 
+                        onChangeText={v => setEditForm({...editForm, firstName: v})} 
+                      />
+                      <TextInput 
+                        style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
+                        placeholder={t.lastName} 
+                        placeholderTextColor={colors.textSecondary} 
+                        value={editForm.lastName} 
+                        onChangeText={v => setEditForm({...editForm, lastName: v})} 
+                      />
+                    </View>
                     <TextInput 
-                      style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
-                      placeholder={t.lastName} 
+                      style={[styles.input, styles.textArea, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
+                      placeholder={t.bio} 
                       placeholderTextColor={colors.textSecondary} 
-                      value={editForm.lastName} 
-                      onChangeText={v => setEditForm({...editForm, lastName: v})} 
+                      multiline 
+                      value={editForm.bio} 
+                      onChangeText={v => setEditForm({...editForm, bio: v})} 
                     />
+                    <View style={styles.editActions}>
+                      <TouchableOpacity style={[styles.miniBtn, { backgroundColor: colors.cardBorder }]} onPress={() => setEditing(false)}>
+                        <X size={18} color="#fff" /><Text style={styles.btnText}>{t.back}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.miniBtn, { backgroundColor: '#238636' }]} onPress={handleSave}>
+                        <Save size={18} color="#fff" /><Text style={styles.btnText}>{t.save}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <TextInput 
-                    style={[styles.input, styles.textArea, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
-                    placeholder={t.bio} 
-                    placeholderTextColor={colors.textSecondary} 
-                    multiline 
-                    value={editForm.bio} 
-                    onChangeText={v => setEditForm({...editForm, bio: v})} 
-                  />
-                  <View style={styles.editActions}>
-                    <TouchableOpacity style={[styles.miniBtn, { backgroundColor: colors.cardBorder }]} onPress={() => setEditing(false)}>
-                      <X size={18} color="#fff" /><Text style={styles.btnText}>{t.back}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.miniBtn, { backgroundColor: '#238636' }]} onPress={handleSave}>
-                      <Save size={18} color="#fff" /><Text style={styles.btnText}>{t.save}</Text>
-                    </TouchableOpacity>
-                  </View>
+                ) : (
+                  <>
+                    <Text style={[styles.name, { color: colors.text }]}>
+                      {user.firstName || user.username} {user.lastName || ''}
+                    </Text>
+                    
+                    <Text style={[styles.bioText, { color: colors.textSecondary }]}>
+                      {user.bio || 'Участник Z'}
+                    </Text>
+                    
+                    {/* Unique Profile Views Badge */}
+                    <View style={[styles.profileViewsBadge, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+                      <Eye size={14} color={colors.primary} />
+                      <Text style={[styles.profileViewsText, { color: colors.text }]}>
+                        {user.profileViewsCount || 0} {t.profileViews}
+                      </Text>
+                    </View>
+
+                    {/* Followers & Following Stats Buttons */}
+                    <View style={styles.stats}>
+                      <TouchableOpacity style={styles.statItem} onPress={() => openUsersListModal('followers')}>
+                        <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.followers || 0}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.followers}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.statItem} onPress={() => openUsersListModal('following')}>
+                        <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.following || 0}</Text>
+                        <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.following}</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Actions Bar */}
+                    <View style={styles.actions}>
+                      {isOwnProfile ? (
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => setEditing(true)}>
+                          <Edit3 size={18} color="#fff" />
+                          <Text style={styles.btnText}>{t.editProfile}</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <>
+                          <TouchableOpacity 
+                            style={[styles.actionBtn, { backgroundColor: user.isFollowing ? colors.cardBorder : colors.primary }]} 
+                            onPress={handleFollow}
+                            disabled={followingLoading}
+                          >
+                            {followingLoading ? <ActivityIndicator size="small" color="#fff" /> : 
+                              <>
+                                {user.isFollowing ? <UserMinus size={18} color="#fff" /> : <UserPlus size={18} color="#fff" />}
+                                <Text style={styles.btnText}>{user.isFollowing ? t.unfollow : t.follow}</Text>
+                              </>
+                            }
+                          </TouchableOpacity>
+                          
+                          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBorder }]}>
+                            <MessageCircle size={18} color="#fff" />
+                            <Text style={styles.btnText}>{t.message}</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  </>
+                )}
+              </Animated.View>
+
+              {/* Privacy Lock Banner */}
+              {user.isRestricted ? (
+                <View style={[styles.privateProfileBox, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                  <Lock size={40} color={colors.textSecondary} />
+                  <Text style={[styles.privateProfileTitle, { color: colors.text }]}>Это закрытый профиль</Text>
+                  <Text style={[styles.privateProfileSub, { color: colors.textSecondary }]}>
+                    {t.restrictedProfile}
+                  </Text>
                 </View>
               ) : (
-                <>
-                  <Text style={[styles.name, { color: colors.text }]}>
-                    {user.firstName || user.username} {user.lastName || ''}
-                  </Text>
-                  
-                  <Text style={[styles.bioText, { color: colors.textSecondary }]}>
-                    {user.bio || 'Участник Z Network'}
-                  </Text>
-                  
-                  {/* Followers & Following Stats Buttons */}
-                  <View style={styles.stats}>
-                    <TouchableOpacity style={styles.statItem} onPress={() => openUsersListModal('followers')}>
-                      <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.followers || 0}</Text>
-                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.followers}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.statItem} onPress={() => openUsersListModal('following')}>
-                      <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.following || 0}</Text>
-                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.following}</Text>
-                    </TouchableOpacity>
+                !editing && (
+                  <View style={styles.feedArea}>
+                     <View style={styles.sectionHeader}>
+                       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.posts}</Text>
+                     </View>
+                     {posts.length === 0 ? (
+                       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Пока нет публикаций</Text>
+                     ) : (
+                       posts.map((p) => (
+                          <PostCard 
+                            key={p.id}
+                            post={p}
+                            currentUser={currentUser}
+                            t={t}
+                            onShare={(item) => setShareItem(item)}
+                            onPostDeleted={(id) => setPosts(posts.filter(item => item.id !== id))}
+                            onPostUpdated={(updated) => setPosts(posts.map(item => item.id === updated.id ? updated : item))}
+                          />
+                       ))
+                     )}
                   </View>
-
-                  {/* Actions Bar */}
-                  <View style={styles.actions}>
-                    {isOwnProfile ? (
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => setEditing(true)}>
-                        <Edit3 size={18} color="#fff" />
-                        <Text style={styles.btnText}>{t.editProfile}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <>
-                        <TouchableOpacity 
-                          style={[styles.actionBtn, { backgroundColor: user.isFollowing ? colors.cardBorder : colors.primary }]} 
-                          onPress={handleFollow}
-                          disabled={followingLoading}
-                        >
-                          {followingLoading ? <ActivityIndicator size="small" color="#fff" /> : 
-                            <>
-                              {user.isFollowing ? <UserMinus size={18} color="#fff" /> : <UserPlus size={18} color="#fff" />}
-                              <Text style={styles.btnText}>{user.isFollowing ? t.unfollow : t.follow}</Text>
-                            </>
-                          }
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBorder }]}>
-                          <MessageCircle size={18} color="#fff" />
-                          <Text style={styles.btnText}>{t.message}</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </>
+                )
               )}
-            </Animated.View>
-
-            {/* Privacy Lock Banner */}
-            {user.isRestricted ? (
-              <View style={[styles.privateProfileBox, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                <Lock size={40} color={colors.textSecondary} />
-                <Text style={[styles.privateProfileTitle, { color: colors.text }]}>Это закрытый профиль</Text>
-                <Text style={[styles.privateProfileSub, { color: colors.textSecondary }]}>
-                  {t.restrictedProfile}
-                </Text>
-              </View>
-            ) : (
-              !editing && (
-                <View style={styles.feedArea}>
-                   <View style={styles.sectionHeader}>
-                     <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.posts}</Text>
-                   </View>
-                   {posts.length === 0 ? (
-                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Пока нет публикаций</Text>
-                   ) : (
-                     posts.map((p) => (
-                        <PostCard 
-                          key={p.id}
-                          post={p}
-                          currentUser={currentUser}
-                          t={t}
-                          onShare={(item) => setShareItem(item)}
-                          onPostDeleted={(id) => setPosts(posts.filter(item => item.id !== id))}
-                          onPostUpdated={(updated) => setPosts(posts.map(item => item.id === updated.id ? updated : item))}
-                        />
-                     ))
-                   )}
-                </View>
-              )
-            )}
+            </View>
           </ScrollView>
 
           {/* Followers / Following List Modal */}
@@ -378,6 +399,8 @@ const styles = StyleSheet.create({
   desktopShell: { flexDirection: 'row' },
   content: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
+  desktopScrollContent: { paddingVertical: 24 },
+  pageInner: { maxWidth: 640, width: '100%', alignSelf: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
   headerTitle: { fontSize: 18, fontWeight: '800' },
@@ -387,6 +410,8 @@ const styles = StyleSheet.create({
   avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3 },
   name: { fontSize: 22, fontWeight: '900' },
   bioText: { textAlign: 'center', marginTop: 6, fontSize: 14, paddingHorizontal: 16 },
+  profileViewsBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, marginTop: 12 },
+  profileViewsText: { fontSize: 12, fontWeight: '700' },
   stats: { flexDirection: 'row', gap: 36, marginTop: 20 },
   statItem: { alignItems: 'center' },
   statNum: { fontWeight: '800', fontSize: 18 },
