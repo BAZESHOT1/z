@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { prisma } from '../app';
+import { prisma } from '../prisma';
 
 const ALGORITHM = 'aes-256-gcm';
 
@@ -82,4 +82,24 @@ export function verifyPassword(password: string, combined: string): boolean {
   const keyBuffer = Buffer.from(keyHex, 'hex');
   const derivedKey = crypto.scryptSync(password, salt, 64);
   return crypto.timingSafeEqual(keyBuffer, derivedKey);
+}
+
+// BUCKET MEDIA ENCRYPTION
+export function encryptBuffer(buffer: Buffer, secret: string = 'z_mesh_storage_secret_key_32bytes'): Buffer {
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]);
+}
+
+export function decryptBuffer(encryptedBuffer: Buffer, secret: string = 'z_mesh_storage_secret_key_32bytes'): Buffer {
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const iv = encryptedBuffer.subarray(0, 12);
+  const tag = encryptedBuffer.subarray(12, 28);
+  const data = encryptedBuffer.subarray(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(data), decipher.final()]);
 }

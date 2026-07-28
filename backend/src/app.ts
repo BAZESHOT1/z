@@ -6,17 +6,19 @@ import path from 'path';
 
 import { prisma } from './prisma';
 import { config } from './config';
-import { hashPassword, verifyPassword } from './utils/crypto';
+import { hashPassword, verifyPassword, encryptBuffer, decryptBuffer } from './utils/crypto';
 import { gitWatcher } from './services/gitWatcher';
 import { keyRotation } from './services/keyRotation';
 import { clusterService } from './services/clusterService';
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
 
-// Хранилище фолбека для подписок если таблицы Follows нет в БД
-const inMemoryFollows = new Set<string>(); // "followerUsername:followingUsername"
+// Хранилище фолбека для подписок
+const inMemoryFollows = new Set<string>();
+
+const BUCKET_DIR = path.join(process.cwd(), 'bucket');
 
 // --- MIDDLEWARE ---
 const authenticate = async (req: any, res: Response, next: NextFunction) => {
@@ -106,28 +108,62 @@ app.get('/api/auth/check-username', async (req, res) => {
   }
 });
 
-// --- MEDIA UPLOAD ---
+// --- ENCRYPTED BUCKET MEDIA UPLOAD & SERVE ---
 app.post('/api/upload', authenticate, (req, res) => {
   try {
     const { file } = req.body;
-    if (!file) return res.status(400).json({ error: 'Файл не передать' });
-    
-    // Если это base64 data URL
-    if (file.startsWith('data:image')) {
-      const filename = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.png`;
-      const base64Data = file.replace(/^data:image\/\w+;base64,/, "");
-      const uploadPath = path.join(process.cwd(), 'uploads', filename);
-      fs.writeFileSync(uploadPath, base64Data, 'base64');
-      return res.json({ url: `${config.masterNodeUrl || 'http://82.26.152.225:4000'}/uploads/${filename}`, base64: file });
+    if (!file) return res.status(400).json({ error: 'Файл не передан' });
+
+    let ext = 'png';
+    let buffer: Buffer;
+
+    if (file.startsWith('data:')) {
+      const matches = file.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+      if (matches) {
+        ext = matches[1];
+        buffer = Buffer.from(matches[2], 'base64');
+      } else {
+        const base64Data = file.replace(/^data:[^;]+;base64,/, '');
+        buffer = Buffer.from(base64Data, 'base64');
+      }
+    } else {
+      buffer = Buffer.from(file, 'utf8');
     }
 
-    res.json({ url: file, base64: file });
+    // Шифруем буфер файла перед сохранением в бакет
+    const encrypted = encryptBuffer(buffer, config.clusterSecret || config.jwtSecret);
+    const filename = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
+    
+    fs.writeFileSync(path.join(BUCKET_DIR, filename), encrypted);
+
+    const baseUrl = config.masterNodeUrl || `http://localhost:${config.port}`;
+    res.json({ url: `${baseUrl}/bucket/${filename}` });
   } catch (e: any) {
-    res.status(500).json({ error: 'Ошибка при сохранении изображения' });
+    console.error('Upload error:', e.message);
+    res.status(500).json({ error: 'Ошибка при сохранении медиафайла' });
   }
 });
 
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.get('/bucket/:filename', (req, res) => {
+  try {
+    const filePath = path.join(BUCKET_DIR, req.params.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+
+    const encryptedData = fs.readFileSync(filePath);
+    const decrypted = decryptBuffer(encryptedData, config.clusterSecret || config.jwtSecret);
+
+    const ext = path.extname(req.params.filename).toLowerCase();
+    const contentType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : 'image/png';
+
+    res.setHeader('Content-Type', contentType);
+    res.send(decrypted);
+  } catch (e: any) {
+    console.error('Bucket serve error:', e.message);
+    res.status(500).send('Error decrypting file');
+  }
+});
 
 // --- USERS & FOLLOWS ---
 app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
@@ -138,7 +174,6 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
     });
     if (!user) return res.status(404).json({ error: 'Not found' });
 
-    // Считаем подписчиков и подписки
     let followersCount = 0;
     let followingCount = 0;
     for (const key of inMemoryFollows) {
@@ -161,15 +196,23 @@ app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
 
 app.post('/api/users/update', authenticate, async (req: any, res) => {
   try {
-    const { firstName, lastName, bio, avatar, socialLinks } = req.body;
+    const allowed = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
+    const updateData: Record<string, any> = {};
+
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        updateData[key] = req.body[key];
+      }
+    }
+
     const updated = await prisma.user.update({ 
       where: { id: req.user.id }, 
-      data: { firstName, lastName, bio, avatar, socialLinks } 
+      data: updateData 
     });
     res.json(updated);
   } catch (e: any) {
     console.error('Update profile error:', e.message);
-    res.status(400).json({ error: 'Update failed' });
+    res.status(400).json({ error: 'Update failed: ' + e.message });
   }
 });
 
@@ -227,7 +270,7 @@ app.get('/api/users/:username/following', async (req, res) => {
 
     for (const key of inMemoryFollows) {
       const [follower, following] = key.split(':');
-      if (follower === target) followingUsernames.push(following);
+      if (follower === target) followingUsernames.push(follower);
     }
 
     const users = await prisma.user.findMany({
@@ -269,7 +312,7 @@ app.get('/api/posts', async (req, res) => {
 app.post('/api/posts', authenticate, async (req: any, res) => {
   try {
     const post = await prisma.post.create({
-      data: { content: req.body.content, authorId: req.user.id },
+      data: { content: req.body.content, mediaUrl: req.body.mediaUrl, authorId: req.user.id },
       include: { author: { select: { username: true, firstName: true, avatar: true } } }
     });
     res.json({ ...post, _count: { likes: 0, comments: 0 } });
@@ -282,11 +325,9 @@ app.post('/api/posts', authenticate, async (req: any, res) => {
 async function bootstrap() {
   console.log('🚀 Инициализация систем Z-Node...');
 
-  ['uploads', 'uploads/avatars', 'uploads/posts'].forEach(f => {
-    if (!fs.existsSync(path.join(process.cwd(), f))) {
-      fs.mkdirSync(path.join(process.cwd(), f), { recursive: true });
-    }
-  });
+  if (!fs.existsSync(BUCKET_DIR)) {
+    fs.mkdirSync(BUCKET_DIR, { recursive: true });
+  }
 
   gitWatcher.start();
   await keyRotation.start();
