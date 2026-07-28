@@ -790,7 +790,7 @@ async function bootstrap() {
 
   try {
     console.log('🔄 Синхронизация Prisma Client с базой данных...');
-    execSync('npx prisma db push && npx prisma generate', { stdio: 'inherit' });
+    execSync('npx prisma db push --accept-data-loss && npx prisma generate', { stdio: 'inherit' });
   } catch (e: any) {
     console.warn('Prisma sync warning:', e.message);
   }
