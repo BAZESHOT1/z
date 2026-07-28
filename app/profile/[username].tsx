@@ -6,9 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow, setAuthToken, getAvatarUrl, fetchFollowers, fetchFollowing } from '../api';
 import { translations } from '../i18n';
 import { useTheme } from '../themeContext';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import Sidebar from '../../components/Sidebar';
 import Dock from '../../components/Dock';
+import PostCard from '../../components/PostCard';
+import ShareSheet from '../../components/ShareSheet';
 
 export default function ProfileScreen() {
   const { username } = useLocalSearchParams();
@@ -23,10 +25,11 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [followingLoading, setFollowingLoading] = useState(false);
 
-  // Modals
+  // Modals & Share
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [listLoading, setListLoading] = useState(false);
+  const [shareItem, setShareItem] = useState<any | null>(null);
   
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', bio: '', socialLinks: '', birthDate: '', avatar: '' });
 
@@ -247,58 +250,28 @@ export default function ProfileScreen() {
                  {posts.length === 0 ? (
                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Пока нет публикаций</Text>
                  ) : (
-                   posts.map((p, idx) => (
-                      <Animated.View key={p.id} entering={SlideInDown.delay(idx * 80)} style={[styles.postCard, { backgroundColor: colors.postCardBg, borderColor: colors.cardBorder }]}>
-                        <Text style={[styles.postContent, { color: colors.text }]}>{p.content}</Text>
-                        {p.mediaUrl && <Image source={{ uri: p.mediaUrl }} style={styles.postMedia} resizeMode="cover" />}
-                        <Text style={[styles.postDate, { color: colors.textSecondary }]}>{new Date(p.createdAt).toLocaleDateString()}</Text>
-                      </Animated.View>
+                   posts.map((p) => (
+                      <PostCard 
+                        key={p.id}
+                        post={p}
+                        currentUser={currentUser}
+                        t={t}
+                        onShare={(item) => setShareItem(item)}
+                        onPostDeleted={(id) => setPosts(posts.filter(item => item.id !== id))}
+                        onPostUpdated={(updated) => setPosts(posts.map(item => item.id === updated.id ? updated : item))}
+                      />
                    ))
                  )}
               </View>
             )}
           </ScrollView>
 
-          {/* Modal */}
-          <Modal visible={modalType !== null} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>
-                    {modalType === 'followers' ? t.followers : t.following}
-                  </Text>
-                  <TouchableOpacity onPress={() => setModalType(null)}>
-                    <X size={22} color={colors.text} />
-                  </TouchableOpacity>
-                </View>
-
-                {listLoading ? (
-                  <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} />
-                ) : usersList.length === 0 ? (
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Список пуст</Text>
-                ) : (
-                  <ScrollView style={{ maxHeight: 350 }}>
-                    {usersList.map((u) => (
-                      <TouchableOpacity 
-                        key={u.id} 
-                        style={[styles.userRow, { borderBottomColor: colors.subtleBorder }]}
-                        onPress={() => {
-                          setModalType(null);
-                          router.push(`/profile/${u.username}`);
-                        }}
-                      >
-                        <Image source={{ uri: getAvatarUrl(u.username, u.avatar) }} style={styles.rowAvatar} />
-                        <View>
-                          <Text style={[styles.rowName, { color: colors.text }]}>{u.firstName || u.username}</Text>
-                          <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>@{u.username}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            </View>
-          </Modal>
+          {/* Share Sheet */}
+          <ShareSheet 
+            visible={shareItem !== null} 
+            item={shareItem} 
+            onClose={() => setShareItem(null)} 
+          />
 
           {!isDesktop && <Dock items={dockItems} activeTab={isOwnProfile ? "profile" : "other"} />}
         </View>
@@ -335,20 +308,8 @@ const styles = StyleSheet.create({
   textArea: { minHeight: 70, textAlignVertical: 'top' },
   editActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   miniBtn: { flex: 1, height: 40, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  feedArea: { padding: 16 },
+  feedArea: { padding: 12 },
   sectionHeader: { marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '800' },
-  postCard: { padding: 18, borderRadius: 18, marginBottom: 12, borderWidth: 1 },
-  postContent: { lineHeight: 22, fontSize: 14 },
-  postMedia: { width: '100%', height: 200, borderRadius: 12, marginTop: 12 },
-  postDate: { fontSize: 11, marginTop: 10 },
-  emptyText: { textAlign: 'center', marginVertical: 20, fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { borderRadius: 20, padding: 20, width: '100%', maxWidth: 420, borderWidth: 1 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '800' },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1 },
-  rowAvatar: { width: 38, height: 38, borderRadius: 19 },
-  rowName: { fontWeight: '700', fontSize: 14 },
-  rowMeta: { fontSize: 12 }
+  emptyText: { textAlign: 'center', marginVertical: 20, fontSize: 14 }
 });

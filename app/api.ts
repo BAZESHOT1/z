@@ -51,7 +51,7 @@ export const fetchAdminUsers = () => request('/api/admin/users').then(res => res
 export const updateUserRole = (userId: number, role: string) => request(`/api/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) });
 export const fetchAdminStats = () => request('/api/admin/stats');
 
-// Paginated Feed
+// Paginated Feed & Posts CRUD
 export const fetchFeedPosts = (page: number = 1, limit: number = 10, username?: string) => 
   request(`/api/posts/feed?page=${page}&limit=${limit}${username ? `&username=${encodeURIComponent(username)}` : ''}`);
 
@@ -60,6 +60,15 @@ export const fetchPosts = (username?: string) =>
 
 export const createPost = (content: string, mediaUrl?: string) => 
   request('/api/posts', { method: 'POST', body: JSON.stringify({ content, mediaUrl }) });
+
+export const updatePost = (postId: number, content: string, mediaUrl?: string) => 
+  request(`/api/posts/${postId}`, { method: 'PUT', body: JSON.stringify({ content, mediaUrl }) });
+
+export const deletePost = (postId: number) => 
+  request(`/api/posts/${postId}`, { method: 'DELETE' });
+
+export const recordPostView = (postId: number) => 
+  request(`/api/posts/${postId}/view`, { method: 'POST' });
 
 export const toggleLike = (postId: number) => 
   request(`/api/posts/${postId}/like`, { method: 'POST' });

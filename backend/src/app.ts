@@ -127,7 +127,6 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticate, (req: any, res) => res.json(req.user));
 
-// TEST ROUTE: BECOME ADMIN (ROOT)
 app.post('/api/auth/become-admin', authenticate, async (req: any, res) => {
   try {
     const updated = await prisma.user.update({
@@ -219,234 +218,7 @@ app.get('/api/admin/stats', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// --- TELEGRAM-STYLE MINI APPS PLATFORM ---
-app.get('/api/apps', async (req, res) => {
-  try {
-    let dbApps: any[] = [];
-    try {
-      dbApps = await (prisma as any).miniApp.findMany({
-        include: { author: { select: { username: true, firstName: true } } },
-        orderBy: { id: 'desc' }
-      });
-    } catch (e) {}
-
-    res.json([...inMemoryApps, ...dbApps]);
-  } catch (e) {
-    res.json(inMemoryApps);
-  }
-});
-
-app.post('/api/apps', authenticate, async (req: any, res) => {
-  try {
-    const { title, description, url, icon } = req.body;
-    if (!title || !url) return res.status(400).json({ error: 'Укажите название и URL сайта' });
-
-    let appObj;
-    try {
-      appObj = await (prisma as any).miniApp.create({
-        data: {
-          title: title.trim(),
-          description: (description || '').trim(),
-          url: url.trim(),
-          icon: icon || '🚀',
-          authorId: req.user.id
-        }
-      });
-    } catch (e) {
-      appObj = {
-        id: Date.now(),
-        title: title.trim(),
-        description: (description || '').trim(),
-        url: url.trim(),
-        icon: icon || '🚀',
-        author: { username: req.user.username },
-        createdAt: new Date()
-      };
-      inMemoryApps.unshift(appObj);
-    }
-
-    res.status(201).json(appObj);
-  } catch (e: any) {
-    res.status(400).json({ error: 'Не удалось опубликовать приложение' });
-  }
-});
-
-// --- MEDIA UPLOAD ---
-app.post('/api/upload', authenticate, (req, res) => {
-  try {
-    const { file } = req.body;
-    if (!file) return res.status(400).json({ error: 'Файл не передан' });
-
-    let ext = 'png';
-    let buffer: Buffer;
-
-    if (file.startsWith('data:')) {
-      const matches = file.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
-      if (matches) {
-        ext = matches[1];
-        buffer = Buffer.from(matches[2], 'base64');
-      } else {
-        const base64Data = file.replace(/^data:[^;]+;base64,/, '');
-        buffer = Buffer.from(base64Data, 'base64');
-      }
-    } else {
-      buffer = Buffer.from(file, 'utf8');
-    }
-
-    const encrypted = encryptBuffer(buffer, config.clusterSecret || config.jwtSecret);
-    const filename = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
-    
-    fs.writeFileSync(path.join(BUCKET_DIR, filename), encrypted);
-
-    const baseUrl = config.masterNodeUrl || `http://localhost:${config.port}`;
-    res.json({ url: `${baseUrl}/bucket/${filename}` });
-  } catch (e: any) {
-    console.error('Upload error:', e.message);
-    res.status(500).json({ error: 'Ошибка при сохранении медиафайла' });
-  }
-});
-
-app.get('/bucket/:filename', (req, res) => {
-  try {
-    const filePath = path.join(BUCKET_DIR, req.params.filename);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).send('File not found');
-    }
-
-    const encryptedData = fs.readFileSync(filePath);
-    const decrypted = decryptBuffer(encryptedData, config.clusterSecret || config.jwtSecret);
-
-    const ext = path.extname(req.params.filename).toLowerCase();
-    const contentType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : 'image/png';
-
-    res.setHeader('Content-Type', contentType);
-    res.send(decrypted);
-  } catch (e: any) {
-    console.error('Bucket serve error:', e.message);
-    res.status(500).send('Error decrypting file');
-  }
-});
-
-// --- USERS & FOLLOWS ---
-app.get('/api/users/:username', optionalAuth, async (req: any, res) => {
-  try {
-    const targetUsername = req.params.username;
-    const user = await prisma.user.findUnique({
-      where: { username: targetUsername }
-    });
-    if (!user) return res.status(404).json({ error: 'Not found' });
-
-    let followersCount = 0;
-    let followingCount = 0;
-    for (const key of inMemoryFollows) {
-      const [follower, following] = key.split(':');
-      if (following === targetUsername) followersCount++;
-      if (follower === targetUsername) followingCount++;
-    }
-
-    const isFollowing = req.user ? inMemoryFollows.has(`${req.user.username}:${targetUsername}`) : false;
-
-    res.json({ 
-      ...user, 
-      isFollowing,
-      _count: { posts: 0, followers: followersCount, following: followingCount } 
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'Error fetching profile' });
-  }
-});
-
-app.post('/api/users/update', authenticate, async (req: any, res) => {
-  try {
-    const allowed = ['firstName', 'lastName', 'bio', 'avatar', 'socialLinks', 'privacyProfile', 'privacyMessages', 'privacyPosts'];
-    const updateData: Record<string, any> = {};
-
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) {
-        updateData[key] = req.body[key];
-      }
-    }
-
-    const updated = await prisma.user.update({ 
-      where: { id: req.user.id }, 
-      data: updateData 
-    });
-    res.json(updated);
-  } catch (e: any) {
-    console.error('Update profile error:', e.message);
-    res.status(400).json({ error: 'Update failed: ' + e.message });
-  }
-});
-
-app.post('/api/users/:username/follow', authenticate, async (req: any, res) => {
-  try {
-    const follower = req.user.username;
-    const target = req.params.username;
-
-    if (follower === target) {
-      return res.status(400).json({ error: 'Нельзя подписаться на самого себя' });
-    }
-
-    const key = `${follower}:${target}`;
-    let following = false;
-
-    if (inMemoryFollows.has(key)) {
-      inMemoryFollows.delete(key);
-      following = false;
-    } else {
-      inMemoryFollows.add(key);
-      following = true;
-    }
-
-    res.json({ following, username: target });
-  } catch (e: any) {
-    res.status(500).json({ error: 'Follow operation failed' });
-  }
-});
-
-app.get('/api/users/:username/followers', async (req, res) => {
-  try {
-    const target = req.params.username;
-    const followerUsernames: string[] = [];
-
-    for (const key of inMemoryFollows) {
-      const [follower, following] = key.split(':');
-      if (following === target) followerUsernames.push(follower);
-    }
-
-    const users = await prisma.user.findMany({
-      where: { username: { in: followerUsernames } },
-      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
-    });
-
-    res.json(users);
-  } catch (e) {
-    res.json([]);
-  }
-});
-
-app.get('/api/users/:username/following', async (req, res) => {
-  try {
-    const target = req.params.username;
-    const followingUsernames: string[] = [];
-
-    for (const key of inMemoryFollows) {
-      const [follower, following] = key.split(':');
-      if (follower === target) followingUsernames.push(follower);
-    }
-
-    const users = await prisma.user.findMany({
-      where: { username: { in: followingUsernames } },
-      select: { id: true, username: true, firstName: true, lastName: true, avatar: true, bio: true }
-    });
-
-    res.json(users);
-  } catch (e) {
-    res.json([]);
-  }
-});
-
-// --- SMART PAGINATED FEED ---
+// --- POSTS FULL CRUD & VIEWS ---
 app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
   try {
     const page = parseInt(req.query.page as string || '1');
@@ -459,7 +231,7 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
     let posts = await prisma.post.findMany({
       where: filterUsername ? { author: { username: filterUsername } } : {},
       include: {
-        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true } }
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -472,6 +244,7 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
     const formatted = posts.map(p => {
       let likeCount = 0;
       let isLiked = false;
+
       for (const key of inMemoryLikes) {
         const [u, pId] = key.split(':');
         if (pId === String(p.id)) {
@@ -507,7 +280,7 @@ app.get('/api/posts', async (req, res) => {
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: String(username) } } : {},
       include: { 
-        author: { select: { id: true, username: true, firstName: true, avatar: true } }
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
       },
       orderBy: { createdAt: 'desc' },
       take: 50
@@ -526,12 +299,75 @@ app.get('/api/posts', async (req, res) => {
 app.post('/api/posts', authenticate, async (req: any, res) => {
   try {
     const post = await prisma.post.create({
-      data: { content: req.body.content, mediaUrl: req.body.mediaUrl, authorId: req.user.id },
-      include: { author: { select: { id: true, username: true, firstName: true, avatar: true } } }
+      data: { 
+        content: req.body.content, 
+        mediaUrl: req.body.mediaUrl, 
+        authorId: req.user.id 
+      },
+      include: { author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } } }
     });
     res.json({ ...post, isLiked: false, _count: { likes: 0, comments: 0 } });
   } catch (e: any) {
     res.status(400).json({ error: 'Не удалось создать пост' });
+  }
+});
+
+// EDIT POST
+app.put('/api/posts/:id', authenticate, async (req: any, res) => {
+  try {
+    const postId = parseInt(req.params.id);
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+
+    if (!post) return res.status(404).json({ error: 'Пост не найден' });
+    if (post.authorId !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'ROOT') {
+      return res.status(403).json({ error: 'Нет прав на редактирование' });
+    }
+
+    const updated = await prisma.post.update({
+      where: { id: postId },
+      data: {
+        content: req.body.content,
+        mediaUrl: req.body.mediaUrl !== undefined ? req.body.mediaUrl : post.mediaUrl,
+        isEdited: true
+      },
+      include: { author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } } }
+    });
+
+    res.json(updated);
+  } catch (e: any) {
+    res.status(500).json({ error: 'Ошибка редактирования поста' });
+  }
+});
+
+// DELETE POST
+app.delete('/api/posts/:id', authenticate, async (req: any, res) => {
+  try {
+    const postId = parseInt(req.params.id);
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+
+    if (!post) return res.status(404).json({ error: 'Пост не найден' });
+    if (post.authorId !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'ROOT') {
+      return res.status(403).json({ error: 'Нет прав на удаление' });
+    }
+
+    await prisma.post.delete({ where: { id: postId } });
+    res.json({ message: 'Пост успешно удален', id: postId });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Ошибка при удалении поста' });
+  }
+});
+
+// VIEW COUNTER
+app.post('/api/posts/:id/view', async (req, res) => {
+  try {
+    const postId = parseInt(req.params.id);
+    const updated = await prisma.post.update({
+      where: { id: postId },
+      data: { viewsCount: { increment: 1 } }
+    });
+    res.json({ viewsCount: updated.viewsCount });
+  } catch (e) {
+    res.json({ viewsCount: 0 });
   }
 });
 
@@ -597,6 +433,113 @@ app.post('/api/posts/:id/comments', authenticate, async (req: any, res) => {
     res.status(201).json(newComment);
   } catch (e) {
     res.status(500).json({ error: 'Comment failed' });
+  }
+});
+
+// --- MEDIA & APPS PLATFORM ---
+app.get('/api/apps', async (req, res) => {
+  try {
+    let dbApps: any[] = [];
+    try {
+      dbApps = await (prisma as any).miniApp.findMany({
+        include: { author: { select: { username: true, firstName: true } } },
+        orderBy: { id: 'desc' }
+      });
+    } catch (e) {}
+
+    res.json([...inMemoryApps, ...dbApps]);
+  } catch (e) {
+    res.json(inMemoryApps);
+  }
+});
+
+app.post('/api/apps', authenticate, async (req: any, res) => {
+  try {
+    const { title, description, url, icon } = req.body;
+    if (!title || !url) return res.status(400).json({ error: 'Укажите название и URL сайта' });
+
+    let appObj;
+    try {
+      appObj = await (prisma as any).miniApp.create({
+        data: {
+          title: title.trim(),
+          description: (description || '').trim(),
+          url: url.trim(),
+          icon: icon || '🚀',
+          authorId: req.user.id
+        }
+      });
+    } catch (e) {
+      appObj = {
+        id: Date.now(),
+        title: title.trim(),
+        description: (description || '').trim(),
+        url: url.trim(),
+        icon: icon || '🚀',
+        author: { username: req.user.username },
+        createdAt: new Date()
+      };
+      inMemoryApps.unshift(appObj);
+    }
+
+    res.status(201).json(appObj);
+  } catch (e: any) {
+    res.status(400).json({ error: 'Не удалось опубликовать приложение' });
+  }
+});
+
+app.post('/api/upload', authenticate, (req, res) => {
+  try {
+    const { file } = req.body;
+    if (!file) return res.status(400).json({ error: 'Файл не передан' });
+
+    let ext = 'png';
+    let buffer: Buffer;
+
+    if (file.startsWith('data:')) {
+      const matches = file.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+      if (matches) {
+        ext = matches[1];
+        buffer = Buffer.from(matches[2], 'base64');
+      } else {
+        const base64Data = file.replace(/^data:[^;]+;base64,/, '');
+        buffer = Buffer.from(base64Data, 'base64');
+      }
+    } else {
+      buffer = Buffer.from(file, 'utf8');
+    }
+
+    const encrypted = encryptBuffer(buffer, config.clusterSecret || config.jwtSecret);
+    const filename = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
+    
+    fs.writeFileSync(path.join(BUCKET_DIR, filename), encrypted);
+
+    const baseUrl = config.masterNodeUrl || `http://localhost:${config.port}`;
+    res.json({ url: `${baseUrl}/bucket/${filename}` });
+  } catch (e: any) {
+    console.error('Upload error:', e.message);
+    res.status(500).json({ error: 'Ошибка при сохранении медиафайла' });
+  }
+});
+
+app.get('/bucket/:filename', (req, res) => {
+  try {
+    const filePath = path.join(BUCKET_DIR, req.params.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+
+    const encryptedData = fs.readFileSync(filePath);
+    const decrypted = decryptBuffer(encryptedData, config.clusterSecret || config.jwtSecret);
+
+    const ext = path.extname(req.params.filename).toLowerCase();
+    const contentType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : 'image/png';
+
+    res.setHeader('Content-Type', contentType);
+    res.send(decrypted);
+  } catch (e: any) {
+    console.error('Bucket serve error:', e.message);
+    res.status(500).send('Error decrypting file');
   }
 });
 
