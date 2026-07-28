@@ -1,45 +1,34 @@
 import axios from 'axios';
 import { config } from '../config';
-import { prisma } from '../app';
+import { prisma } from '../prisma';
 
 export class ClusterService {
   public async registerWithMaster(username: string) {
     if (config.isMasterNode) return;
-
     try {
       await axios.post(`${config.masterNodeUrl}/api/cluster/register`, {
         nodeId: config.nodeId,
-        url: `http://${process.env.PUBLIC_IP || 'localhost'}:${config.port}`,
+        url: `http://localhost:${config.port}`,
         owner: username,
         secret: config.clusterSecret
       });
-      console.log('[Cluster] Successfully registered with Master node.');
+      console.log('[Cluster] 🛰️  Зарегистрирован на Master-ноде.');
     } catch (e) {
-      console.error('[Cluster] Registration failed. Retrying in 30s...');
+      console.log('[Cluster] ⚠️  Master недоступен, повтор через 30с.');
       setTimeout(() => this.registerWithMaster(username), 30000);
     }
   }
 
   public async sendHeartbeat() {
     if (config.isMasterNode) return;
-    
     setInterval(async () => {
       try {
         await axios.post(`${config.masterNodeUrl}/api/cluster/heartbeat`, {
           nodeId: config.nodeId,
-          status: 'online',
-          load: process.cpuUsage()
+          status: 'online'
         });
-      } catch (e) {
-        console.error('[Cluster] Heartbeat failed');
-      }
+      } catch (e) {}
     }, 60000);
-  }
-
-  public async getAvailableNodes() {
-    return await (prisma as any).clusterNode.findMany({
-      where: { status: 'active' }
-    });
   }
 }
 
