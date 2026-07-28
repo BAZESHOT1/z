@@ -1,0 +1,22 @@
+{
+  "name": "z-community-backend",
+  "version": "1.0.0",
+  "main": "dist/app.js",
+  "scripts": {
+    "start": "prisma generate && node dist/app.js",
+    "dev": "prisma generate && ts-node-dev --respawn --transpile-only src/app.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

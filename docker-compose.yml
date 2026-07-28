@@ -1,5 +1,4 @@
 services:
-  # ====== БАЗА ДАННЫХ ======
   postgres:
     image: postgres:15-alpine
     container_name: Z-postgres
@@ -8,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}
       POSTGRES_DB: ${POSTGRES_DB:-zzzz}
     ports:
-      - "${POSTGRES_PORT:-5435}:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,72 +15,52 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
     networks:
       - Z-network
 
-  # ====== REDIS ======
   redis:
     image: redis:7-alpine
     container_name: Z-redis
     ports:
-      - "${REDIS_PORT:-6453}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      - "6453:6379"
     networks:
       - Z-network
 
-  # ====== БЭКЕНД ======
-  backend:
+  # Основной управляющий узел
+  master-backend:
     build:
-      context: ./backend
+      context: ./backend-master
       dockerfile: Dockerfile
-    container_name: Z-backend
+    container_name: Z-master
     ports:
-      - "${BACKEND_PORT:-4000}:3000"
-    # Убрали --force-reset, добавили generate перед запуском
-    command: sh -c "npx prisma db push && npx prisma generate && npm run dev"
-    volumes:
-      - ./backend/src:/app/src
+      - "4000:3000"
+    command: sh -c "npx prisma db push && npm run dev"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - PORT=3000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-zzzz}:${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}@postgres:5432/${POSTGRES_DB:-zzzz}
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_EMAILS=${ADMIN_EMAILS}
-      - AI_API_KEYS=${AI_API_KEYS}
-      - DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-cluster}
-      - AUTO_MIGRATE=${AUTO_MIGRATE:-true}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
-      - IS_MASTER_NODE=${IS_MASTER_NODE:-true}
-      - NODE_ID=${NODE_ID:-zzz}
-      - CLUSTER_SECRET=${CLUSTER_SECRET}
-      - MASTER_NODE_URL=${MASTER_NODE_URL}
+      - JWT_SECRET=${JWT_SECRET:-master_secret}
+      - IS_MASTER_NODE=true
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
     networks:
       - Z-network
 
-  # ====== ФРОНТЕНД ======
-  frontend:
+  # Пример Community узла (может быть на другом сервере)
+  community-backend:
     build:
-      context: .
-      dockerfile: mobile/Dockerfile
-    container_name: Z-frontend
+      context: ./backend-community
+      dockerfile: Dockerfile
+    container_name: Z-community
     ports:
-      - "80:80"
+      - "4001:3000"
+    command: sh -c "npx prisma db push && npm run dev"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-zzzz}:${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}@postgres:5432/${POSTGRES_DB:-zzzz}
+      - MASTER_NODE_URL=http://master-backend:3000
+      - IS_MASTER_NODE=false
     depends_on:
-      - backend
-    restart: unless-stopped
+      postgres:
+        condition: service_healthy
     networks:
       - Z-network
 
@@ -91,4 +70,3 @@ networks:
 
 volumes:
   postgres_data:
-    driver: local
