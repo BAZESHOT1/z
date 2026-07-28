@@ -1,23 +1,14 @@
 FROM node:20-alpine
-
-WORKDIR /app
-
-# Установка системных библиотек OpenSSL и совместимости libc для Prisma engine
+# Устанавливаем зависимости для Prisma и компиляции
 RUN apk add --no-cache openssl libc6-compat gcompat
 
+WORKDIR /app
 COPY package*.json ./
-COPY prisma ./prisma/
-
 RUN npm install
-
-# Генерация Prisma Client
+COPY prisma ./prisma/
 RUN npx prisma generate
-
 COPY . .
 
-RUN npm run build
-
 EXPOSE 3000
-
-# Используем --force-reset для синхронизации схемы при несовместимых изменениях данных
-CMD ["sh", "-c", "npx prisma db push --force-reset && npm run start"]
+# Используем dev команду, так как в docker-compose указан запуск через ts-node
+CMD ["sh", "-c", "npx prisma db push && npm run dev"]
