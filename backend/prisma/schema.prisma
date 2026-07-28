@@ -16,9 +16,30 @@ model User {
   lastName       String?
   bio            String?
   avatar         String?
-  role           String   @default("USER") // ADMIN, USER
+  role           String   @default("USER")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  
+  posts          Post[]
+  followedBy     Follows[] @relation("following")
+  following      Follows[] @relation("follower")
+}
+
+model Follows {
+  follower    User @relation("follower", fields: [followerId], references: [id])
+  followerId  Int
+  following   User @relation("following", fields: [followingId], references: [id])
+  followingId Int
+
+  @@id([followerId, followingId])
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  content   String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  Int
+  createdAt DateTime @default(now())
 }
 
 model EncryptionKey {
@@ -30,16 +51,9 @@ model EncryptionKey {
 model ClusterNode {
   id        String   @id
   url       String
-  status    String   @default("active") // active, offline
+  status    String   @default("active")
   lastSeen  DateTime @default(now())
   load      Json?
   owner     String
-  createdAt DateTime @default(now())
-}
-
-model Post {
-  id        Int      @id @default(autoincrement())
-  content   String
-  authorId  Int
   createdAt DateTime @default(now())
 }
