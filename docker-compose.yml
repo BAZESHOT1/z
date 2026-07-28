@@ -1,8 +1,10 @@
 services:
-  # ====== DATABASE (PostgreSQL) ======
-  master-db:
+  # ==========================================
+  # MASTER NODE (Z-CORE)
+  # ==========================================
+  z-db:
     image: postgres:15-alpine
-    container_name: Z-master-db
+    container_name: z-db
     environment:
       POSTGRES_USER: master_user
       POSTGRES_PASSWORD: master_password
@@ -10,51 +12,72 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - master_db_data:/var/lib/postgresql/data
+      - z_master_db_data:/var/lib/postgresql/data
     networks:
-      - Z-network
+      - z-network
 
-  # ====== STORAGE (S3/MinIO) ======
-  master-s3:
-    image: minio/minio:latest
-    container_name: Z-master-s3
-    ports:
-      - "9010:9000" # API порт (изменен, чтобы не было конфликта)
-      - "9011:9001" # Консоль управления
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
-    command: server /data --console-address ":9001"
-    volumes:
-      - master_s3_data:/data
-    networks:
-      - Z-network
-
-  # ====== BACKEND (Master Node) ======
-  master-backend:
+  z-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: Z-master-api
+    container_name: z-backend
     ports:
       - "4000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Даем доступ к докеру
+      - .:/app/repo # Монтируем корень репозитория для git pull
     environment:
-      - DATABASE_URL=postgresql://master_user:master_password@master-db:5432/z_master
+      - DATABASE_URL=postgresql://master_user:master_password@z-db:5432/z_master
       - IS_MASTER_NODE=true
       - JWT_SECRET=${JWT_SECRET:-master_key_777}
-      - S3_ENDPOINT=http://master-s3:9000
-      - S3_ACCESS_KEY=admin
-      - S3_SECRET_KEY=password123
+      - AUTO_UPDATE=true
     depends_on:
-      - master-db
-      - master-s3
+      - z-db
     networks:
-      - Z-network
+      - z-network
+
+  # ==========================================
+  # COMMUNITY NODE
+  # ==========================================
+  community-db:
+    image: postgres:15-alpine
+    container_name: community-db
+    environment:
+      POSTGRES_USER: community_user
+      POSTGRES_PASSWORD: community_password
+      POSTGRES_DB: z_community
+    ports:
+      - "5436:5432"
+    volumes:
+      - z_community_db_data:/var/lib/postgresql/data
+    networks:
+      - z-network
+
+  community-backend:
+    build:
+      context: ./community
+      dockerfile: Dockerfile
+    container_name: community-backend
+    ports:
+      - "4001:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app/repo
+    environment:
+      - DATABASE_URL=postgresql://community_user:community_password@community-db:5432/z_community
+      - MASTER_NODE_URL=http://z-backend:3000
+      - NODE_ID=community_1
+      - AUTO_UPDATE=true
+    depends_on:
+      - community-db
+      - z-backend
+    networks:
+      - z-network
 
 networks:
-  Z-network:
+  z-network:
     driver: bridge
 
 volumes:
-  master_db_data:
-  master_s3_data:
+  z_master_db_data:
+  z_community_db_data:
