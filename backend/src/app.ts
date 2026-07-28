@@ -459,7 +459,8 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
       where: filterUsername ? { author: { username: { equals: filterUsername, mode: 'insensitive' } } } : {},
       include: {
         author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        _count: { select: { likes: true, comments: true } }
+        likes: { select: { userId: true } },
+        comments: { select: { id: true } }
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -469,28 +470,27 @@ app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
     const hasMore = posts.length > limit;
     if (hasMore) posts.pop();
 
-    // Determine if current user liked each post
-    const postIds = posts.map(p => p.id);
-    let userLikedPostIds = new Set<number>();
-
-    if (currentUser && postIds.length > 0) {
-      const userLikes = await (prisma as any).like.findMany({
-        where: { userId: currentUser.id, postId: { in: postIds } },
-        select: { postId: true }
-      });
-      userLikedPostIds = new Set(userLikes.map((l: any) => l.postId));
-    }
-
     const formatted = posts.map(p => ({
-      ...p,
-      isLiked: userLikedPostIds.has(p.id),
-      _count: { likes: p._count.likes, comments: p._count.comments }
+      id: p.id,
+      content: p.content,
+      mediaUrl: p.mediaUrl,
+      viewsCount: p.viewsCount,
+      isEdited: p.isEdited,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+      authorId: p.authorId,
+      author: p.author,
+      isLiked: currentUser ? p.likes.some(l => l.userId === currentUser.id) : false,
+      _count: {
+        likes: p.likes.length,
+        comments: p.comments.length
+      }
     }));
 
     res.json({ posts: formatted, hasMore, page, limit });
   } catch (e: any) {
     console.error('Feed error:', e.message);
-    res.status(500).json({ error: 'Feed load error' });
+    res.status(500).json({ error: 'Feed load error: ' + e.message });
   }
 });
 
@@ -501,16 +501,25 @@ app.get('/api/posts', async (req, res) => {
       where: username ? { author: { username: { equals: String(username), mode: 'insensitive' } } } : {},
       include: { 
         author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        _count: { select: { likes: true, comments: true } }
+        likes: { select: { userId: true } },
+        comments: { select: { id: true } }
       },
       orderBy: { createdAt: 'desc' },
       take: 50
     });
 
     res.json(posts.map(p => ({
-      ...p,
+      id: p.id,
+      content: p.content,
+      mediaUrl: p.mediaUrl,
+      viewsCount: p.viewsCount,
+      isEdited: p.isEdited,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+      authorId: p.authorId,
+      author: p.author,
       isLiked: false,
-      _count: { likes: p._count.likes, comments: p._count.comments }
+      _count: { likes: p.likes.length, comments: p.comments.length }
     })));
   } catch (e: any) {
     res.json([]);
@@ -552,11 +561,24 @@ app.put('/api/posts/:id', authenticate, async (req: any, res) => {
       },
       include: { 
         author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } },
-        _count: { select: { likes: true, comments: true } }
+        likes: { select: { userId: true } },
+        comments: { select: { id: true } }
       }
     });
 
-    res.json(updated);
+    res.json({
+      id: updated.id,
+      content: updated.content,
+      mediaUrl: updated.mediaUrl,
+      viewsCount: updated.viewsCount,
+      isEdited: updated.isEdited,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+      authorId: updated.authorId,
+      author: updated.author,
+      isLiked: req.user ? updated.likes.some(l => l.userId === req.user.id) : false,
+      _count: { likes: updated.likes.length, comments: updated.comments.length }
+    });
   } catch (e: any) {
     res.status(500).json({ error: 'Ошибка редактирования поста' });
   }
