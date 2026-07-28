@@ -60,6 +60,28 @@ export const translations = {
     guestGreeting: "Добро пожаловать в сеть Z",
     guestSub: "Войдите или зарегистрируйтесь, чтобы делиться мыслями и общаться",
     loginRequired: "Требуется авторизация",
+    
+    // Chats & Messaging
+    noChats: "У вас пока нет активных диалогов",
+    typeMessage: "Введите сообщение...",
+    online: "В сети",
+    offline: "Был(а) недавно",
+    
+    // Apps
+    appsTitle: "Приложения Z Network",
+    appsSub: "Децентрализованные сервисы и утилиты экосистемы",
+    aiAssistant: "Z AI Помощник",
+    aiAssistantDesc: "Умный ассистент для генерации текста, кода и анализа данных",
+    meshMonitor: "Монитор нод Z Mesh",
+    meshMonitorDesc: "Статус децентрализованной сети, p2p-нод и шифрования",
+    storageVault: "Z Vault Защищенный Бакет",
+    storageVaultDesc: "Зашифрованное распределенное хранилище файлов AES-256",
+    decentraMarket: "Z Market",
+    decentraMarketDesc: "Каталог dApps и плагинов со всей сети",
+    openApp: "Открыть",
+    activeNodes: "Активных нод",
+    networkLatency: "Задержка сети",
+    encryptedStorage: "Шифрование",
   },
   en: {
     home: "Feed",
@@ -122,6 +144,28 @@ export const translations = {
     guestGreeting: "Welcome to Z Network",
     guestSub: "Sign in or join to share posts and connect with friends",
     loginRequired: "Authorization required",
+
+    // Chats & Messaging
+    noChats: "No active conversations yet",
+    typeMessage: "Type a message...",
+    online: "Online",
+    offline: "Offline",
+
+    // Apps
+    appsTitle: "Z Network Apps",
+    appsSub: "Decentralized ecosystem services and mini-apps",
+    aiAssistant: "Z AI Assistant",
+    aiAssistantDesc: "Smart AI for code generation, writing & data analysis",
+    meshMonitor: "Z Mesh Node Monitor",
+    meshMonitorDesc: "Decentralized P2P network health, ping & storage node status",
+    storageVault: "Z Vault Encrypted Storage",
+    storageVaultDesc: "Distributed AES-256 encrypted media bucket",
+    decentraMarket: "Z Market",
+    decentraMarketDesc: "dApps and plugin store built for Z Network",
+    openApp: "Open App",
+    activeNodes: "Active Nodes",
+    networkLatency: "Network Ping",
+    encryptedStorage: "Encryption",
   }
 };
 

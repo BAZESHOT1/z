@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
-import { Home, MessageSquare, LayoutGrid, User, Send, Heart, Repeat, Image as ImageIcon, Globe, Sun, Moon, LogIn } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, SafeAreaView, ScrollView, Text, Image, ActivityIndicator, useWindowDimensions, TouchableOpacity, TextInput, RefreshControl, Modal } from 'react-native';
+import { Home, MessageSquare, LayoutGrid, User, Send, Heart, Repeat, Image as ImageIcon, Globe, Sun, Moon, LogIn, ArrowLeft, Bot, Activity, ShieldCheck, ShoppingBag, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Animated, { FadeIn, SlideInUp, Layout as ReanimatedLayout } from 'react-native-reanimated';
@@ -31,11 +31,27 @@ export default function MainApp() {
   const [showMediaInput, setShowMediaInput] = useState(false);
   const [posting, setPosting] = useState(false);
 
-  // Active expanded comment post ID
+  // Comments & Reactions
   const [openCommentsPostId, setOpenCommentsPostId] = useState<number | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<number, any[]>>({});
   const [commentInput, setCommentInput] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Image Preview Lightbox
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  // Interactive Messaging State
+  const [activeChatUser, setActiveChatUser] = useState<any | null>(null);
+  const [messagesMap, setMessagesMap] = useState<Record<string, any[]>>({
+    'alex_dev': [
+      { id: 1, sender: 'alex_dev', text: 'Привет! Добро пожаловать в сеть Z!', time: '14:20' },
+      { id: 2, sender: 'me', text: 'Привет! Отличный децентрализованный интерфейс!', time: '14:22' }
+    ],
+    'master_node': [
+      { id: 1, sender: 'master_node', text: 'Система Z-Mesh работает стабильно. Подключено нод: 14', time: '10:00' }
+    ]
+  });
+  const [chatInput, setChatInput] = useState('');
 
   const t = translations[lang];
 
@@ -110,7 +126,6 @@ export default function MainApp() {
   };
 
   const handleToggleLike = async (postId: number) => {
-    // Optimistic UI update
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
         const isLiked = !p.isLiked;
@@ -128,9 +143,7 @@ export default function MainApp() {
 
     try {
       await toggleLike(postId);
-    } catch (e) {
-      // Revert if error
-    }
+    } catch (e) {}
   };
 
   const handleToggleComments = async (postId: number) => {
@@ -168,9 +181,29 @@ export default function MainApp() {
     }
   };
 
+  const handleSendMessage = () => {
+    if (!chatInput.trim() || !activeChatUser) return;
+    const newMsg = {
+      id: Date.now(),
+      sender: 'me',
+      text: chatInput.trim(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessagesMap(prev => ({
+      ...prev,
+      [activeChatUser.username]: [...(prev[activeChatUser.username] || []), newMsg]
+    }));
+    setChatInput('');
+  };
+
   const handleTabPress = (tab: any) => {
     if (tab === 'login') {
       router.push('/auth/login');
+      return;
+    }
+    if (tab === 'settings') {
+      router.push('/settings');
       return;
     }
     if ((tab === 'profile' || tab === 'chats') && !user) {
@@ -184,7 +217,6 @@ export default function MainApp() {
     setActiveTab(tab);
   };
 
-  // Helper function to render text with clickable @mentions
   const renderFormattedText = (text: string) => {
     const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
     return parts.map((part, index) => {
@@ -211,6 +243,13 @@ export default function MainApp() {
     { id: 'profile', icon: <User size={20} color={activeTab === 'profile' ? '#fff' : colors.textSecondary} />, label: t.profile, onClick: () => handleTabPress('profile') },
   ];
 
+  const getTabTitle = () => {
+    if (activeTab === 'feed') return t.home;
+    if (activeTab === 'chats') return t.chats;
+    if (activeTab === 'apps') return t.apps;
+    return t.profile;
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={[styles.shell, isDesktop && styles.desktopShell]}>
@@ -234,7 +273,7 @@ export default function MainApp() {
                   <View style={[styles.zBadge, { backgroundColor: colors.primary }]}>
                     <Text style={styles.zBadgeText}>Z</Text>
                   </View>
-                  <Text style={[styles.feedTitle, { color: colors.text }]}>{activeTab === 'feed' ? t.home : t.chats}</Text>
+                  <Text style={[styles.feedTitle, { color: colors.text }]}>{getTabTitle()}</Text>
                 </View>
 
                 {/* Right Header Actions */}
@@ -272,7 +311,7 @@ export default function MainApp() {
               </View>
 
               {/* Guest Banner */}
-              {!user && (
+              {!user && activeTab === 'feed' && (
                 <Animated.View entering={FadeIn} style={[styles.guestCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
                   <Text style={[styles.guestTitle, { color: colors.text }]}>{t.guestGreeting}</Text>
                   <Text style={[styles.guestSub, { color: colors.textSecondary }]}>{t.guestSub}</Text>
@@ -287,10 +326,9 @@ export default function MainApp() {
                 </Animated.View>
               )}
 
-              {/* Feed Content */}
+              {/* === TAB 1: FEED === */}
               {activeTab === 'feed' && (
                 <Animated.View entering={FadeIn}>
-                  {/* Create Post Input */}
                   {user && (
                     <View style={[styles.createCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
                       <TextInput 
@@ -342,7 +380,6 @@ export default function MainApp() {
                         layout={ReanimatedLayout}
                         style={[styles.postCard, { backgroundColor: colors.postCardBg, borderColor: colors.cardBorder }]}
                       >
-                        {/* Author Header */}
                         <TouchableOpacity onPress={() => router.push(`/profile/${p.author.username}`)} style={styles.postHeader}>
                           <Image source={{ uri: getAvatarUrl(p.author.username, p.author.avatar) }} style={styles.postAvatar} />
                           <View>
@@ -351,16 +388,16 @@ export default function MainApp() {
                           </View>
                         </TouchableOpacity>
 
-                        {/* Content */}
                         <Text style={[styles.postContent, { color: colors.text }]}>
                           {renderFormattedText(p.content)}
                         </Text>
 
                         {p.mediaUrl && (
-                          <Image source={{ uri: p.mediaUrl }} style={styles.postMediaImage} resizeMode="cover" />
+                          <TouchableOpacity onPress={() => setLightboxImage(p.mediaUrl)}>
+                            <Image source={{ uri: p.mediaUrl }} style={styles.postMediaImage} resizeMode="cover" />
+                          </TouchableOpacity>
                         )}
 
-                        {/* Actions Row */}
                         <View style={[styles.postActions, { borderTopColor: colors.subtleBorder }]}>
                           <TouchableOpacity style={styles.postAction} onPress={() => handleToggleLike(p.id)}>
                             <Heart size={18} color={p.isLiked ? '#ef4444' : colors.textSecondary} fill={p.isLiked ? '#ef4444' : 'transparent'} />
@@ -377,7 +414,6 @@ export default function MainApp() {
                           </TouchableOpacity>
                         </View>
 
-                        {/* Expandable Comments Section */}
                         {openCommentsPostId === p.id && (
                           <View style={[styles.commentsSection, { backgroundColor: colors.commentBg, borderColor: colors.cardBorder }]}>
                             {user && (
@@ -399,7 +435,6 @@ export default function MainApp() {
                               </View>
                             )}
 
-                            {/* Comments List */}
                             {(!commentsMap[p.id] || commentsMap[p.id].length === 0) ? (
                               <Text style={[styles.noCommentsText, { color: colors.textSecondary }]}>{t.noComments}</Text>
                             ) : (
@@ -437,9 +472,158 @@ export default function MainApp() {
                 </Animated.View>
               )}
 
+              {/* === TAB 2: CHATS & MESSAGING === */}
+              {activeTab === 'chats' && (
+                <Animated.View entering={FadeIn}>
+                  {activeChatUser ? (
+                    <View style={[styles.chatRoomCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                      {/* Chat Top Header */}
+                      <View style={[styles.chatRoomHeader, { borderBottomColor: colors.subtleBorder }]}>
+                        <TouchableOpacity onPress={() => setActiveChatUser(null)} style={styles.iconActionBtn}>
+                          <ArrowLeft size={20} color={colors.text} />
+                        </TouchableOpacity>
+                        <Image source={{ uri: getAvatarUrl(activeChatUser.username, activeChatUser.avatar) }} style={styles.chatRoomAvatar} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.chatRoomName, { color: colors.text }]}>{activeChatUser.name}</Text>
+                          <Text style={[styles.chatRoomStatus, { color: colors.primary }]}>{t.online}</Text>
+                        </View>
+                      </View>
+
+                      {/* Messages Stream */}
+                      <ScrollView style={styles.messagesContainer} contentContainerStyle={{ padding: 12, gap: 10 }}>
+                        {(messagesMap[activeChatUser.username] || []).map((msg) => {
+                          const isMine = msg.sender === 'me';
+                          return (
+                            <View 
+                              key={msg.id} 
+                              style={[
+                                styles.messageBubble, 
+                                isMine ? [styles.myBubble, { backgroundColor: colors.primary }] : [styles.theirBubble, { backgroundColor: colors.commentBg, borderColor: colors.cardBorder }]
+                              ]}
+                            >
+                              <Text style={[styles.messageText, { color: isMine ? '#fff' : colors.text }]}>{msg.text}</Text>
+                              <Text style={[styles.messageTime, { color: isMine ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}>{msg.time}</Text>
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
+
+                      {/* Chat Input */}
+                      <View style={[styles.chatInputRow, { borderTopColor: colors.subtleBorder }]}>
+                        <TextInput
+                          style={[styles.chatTextInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
+                          placeholder={t.typeMessage}
+                          placeholderTextColor={colors.textSecondary}
+                          value={chatInput}
+                          onChangeText={setChatInput}
+                        />
+                        <TouchableOpacity style={[styles.chatSendBtn, { backgroundColor: colors.primary }]} onPress={handleSendMessage}>
+                          <Send size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 10 }}>
+                      {[
+                        { username: 'alex_dev', name: 'Алексей (Z-Core)', lastMsg: 'Привет! Отличный децентрализованный интерфейс!', avatar: null },
+                        { username: 'master_node', name: 'Системная Нода #1', lastMsg: 'Система Z-Mesh работает стабильно...', avatar: null }
+                      ].map((item) => (
+                        <TouchableOpacity 
+                          key={item.username}
+                          style={[styles.chatListItem, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}
+                          onPress={() => setActiveChatUser(item)}
+                        >
+                          <Image source={{ uri: getAvatarUrl(item.username, item.avatar) }} style={styles.chatListAvatar} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.chatListName, { color: colors.text }]}>{item.name}</Text>
+                            <Text style={[styles.chatListLastMsg, { color: colors.textSecondary }]} numberOfLines={1}>{item.lastMsg}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </Animated.View>
+              )}
+
+              {/* === TAB 3: Z APPS & ECOSYSTEM === */}
+              {activeTab === 'apps' && (
+                <Animated.View entering={FadeIn} style={{ gap: 16 }}>
+                  <Text style={[styles.appsSubTitle, { color: colors.textSecondary }]}>{t.appsSub}</Text>
+
+                  {/* App 1: AI Assistant */}
+                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
+                      <Bot size={28} color="#6366f1" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.aiAssistant}</Text>
+                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.aiAssistantDesc}</Text>
+                    </View>
+                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* App 2: Z Mesh Node Monitor */}
+                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(35, 134, 54, 0.15)' }]}>
+                      <Activity size={28} color="#238636" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.meshMonitor}</Text>
+                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.meshMonitorDesc}</Text>
+                      <View style={styles.nodeStatsRow}>
+                        <Text style={[styles.nodeStatText, { color: colors.primary }]}>• {t.activeNodes}: 18</Text>
+                        <Text style={[styles.nodeStatText, { color: colors.textSecondary }]}>• {t.networkLatency}: 12ms</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* App 3: Z Vault Storage */}
+                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(234, 179, 8, 0.15)' }]}>
+                      <ShieldCheck size={28} color="#eab308" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.storageVault}</Text>
+                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.storageVaultDesc}</Text>
+                    </View>
+                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.cardBorder }]}>
+                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* App 4: Z Market */}
+                  <View style={[styles.appCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+                    <View style={[styles.appIconBox, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+                      <ShoppingBag size={28} color="#ec4899" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.appCardTitle, { color: colors.text }]}>{t.decentraMarket}</Text>
+                      <Text style={[styles.appCardDesc, { color: colors.textSecondary }]}>{t.decentraMarketDesc}</Text>
+                    </View>
+                    <TouchableOpacity style={[styles.appOpenBtn, { backgroundColor: colors.cardBorder }]}>
+                      <Text style={styles.appOpenBtnText}>{t.openApp}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              )}
+
             </View>
           </ScrollView>
-          
+
+          {/* Lightbox Modal for Full Image View */}
+          <Modal visible={lightboxImage !== null} transparent animationType="fade">
+            <View style={styles.lightboxOverlay}>
+              <TouchableOpacity style={styles.lightboxCloseBtn} onPress={() => setLightboxImage(null)}>
+                <X size={28} color="#fff" />
+              </TouchableOpacity>
+              {lightboxImage && (
+                <Image source={{ uri: lightboxImage }} style={styles.lightboxImage} resizeMode="contain" />
+              )}
+            </View>
+          </Modal>
+
           {!isDesktop && <Dock items={dockItems} activeTab={activeTab} />}
         </View>
       </View>
@@ -505,5 +689,41 @@ const styles = StyleSheet.create({
   commentText: { fontSize: 13, marginTop: 2 },
   loadingMoreBox: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 16 },
   loadingMoreText: { fontSize: 13, fontWeight: '600' },
-  endFeedText: { textAlign: 'center', fontSize: 13, marginVertical: 20 }
+  endFeedText: { textAlign: 'center', fontSize: 13, marginVertical: 20 },
+  
+  // Messaging styles
+  chatListItem: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 18, borderWidth: 1 },
+  chatListAvatar: { width: 44, height: 44, borderRadius: 22 },
+  chatListName: { fontWeight: '800', fontSize: 15 },
+  chatListLastMsg: { fontSize: 13, marginTop: 2 },
+  chatRoomCard: { borderRadius: 22, borderWidth: 1, overflow: 'hidden', height: 480 },
+  chatRoomHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1 },
+  chatRoomAvatar: { width: 36, height: 36, borderRadius: 18 },
+  chatRoomName: { fontWeight: '800', fontSize: 15 },
+  chatRoomStatus: { fontSize: 11, fontWeight: '700' },
+  messagesContainer: { flex: 1 },
+  messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 16, marginVertical: 2 },
+  myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 2 },
+  theirBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 2, borderWidth: 1 },
+  messageText: { fontSize: 14, lineHeight: 20 },
+  messageTime: { fontSize: 10, alignSelf: 'flex-end', marginTop: 4 },
+  chatInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderTopWidth: 1 },
+  chatTextInput: { flex: 1, height: 40, borderRadius: 20, paddingHorizontal: 16, borderWidth: 1, fontSize: 14 },
+  chatSendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+
+  // Apps styles
+  appsSubTitle: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  appCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, borderWidth: 1 },
+  appIconBox: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  appCardTitle: { fontSize: 16, fontWeight: '800' },
+  appCardDesc: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  nodeStatsRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
+  nodeStatText: { fontSize: 11, fontWeight: '700' },
+  appOpenBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
+  appOpenBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Lightbox
+  lightboxOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  lightboxCloseBtn: { position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10 },
+  lightboxImage: { width: '100%', height: '80%' }
 });
