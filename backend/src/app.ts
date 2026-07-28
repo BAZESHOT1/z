@@ -3,6 +3,7 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 import { prisma } from './prisma';
 import { config } from './config';
@@ -786,6 +787,13 @@ app.get('/bucket/:filename', (req, res) => {
 // --- BOOTSTRAP ---
 async function bootstrap() {
   console.log('🚀 Инициализация систем Z-Node...');
+
+  try {
+    console.log('🔄 Синхронизация Prisma Client с базой данных...');
+    execSync('npx prisma db push && npx prisma generate', { stdio: 'inherit' });
+  } catch (e: any) {
+    console.warn('Prisma sync warning:', e.message);
+  }
 
   if (!fs.existsSync(BUCKET_DIR)) {
     fs.mkdirSync(BUCKET_DIR, { recursive: true });
