@@ -10,62 +10,52 @@ datasource db {
 model User {
   id              Int        @id @default(autoincrement())
   username        String     @unique
-  email           String     @unique
+  email           String?    @unique
   password        String
   firstName       String?
   lastName        String?
-  avatar          String?
   bio             String?
+  avatar          String?
   socialLinks     String?
   birthDate       String?
-  role            String     @default("USER") // USER, MODERATOR, ADMIN, ROOT
-  privacyProfile  String     @default("EVERYONE") // EVERYONE, FRIENDS, NOBODY
+  role            String     @default("USER")
+  privacyProfile  String     @default("EVERYONE")
   privacyMessages String     @default("EVERYONE")
   privacyPosts    String     @default("EVERYONE")
+  nodeId          String?
   createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @default(now()) @updatedAt
-  posts           Post[]
-  likes           Like[]
-  comments        Comment[]
-  miniApps        MiniApp[]
-  followers       Follow[]   @relation("followingUser")
-  following       Follow[]   @relation("followerUser")
-}
+  updatedAt       DateTime   @updatedAt
 
-model Follow {
-  id          Int      @id @default(autoincrement())
-  followerId  Int
-  followingId Int
-  createdAt   DateTime @default(now())
-
-  follower  User @relation("followerUser", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("followingUser", fields: [followingId], references: [id], onDelete: Cascade)
-
-  @@unique([followerId, followingId])
+  posts           Post[]     @relation("UserPosts")
+  likes           Like[]     @relation("UserLikes")
+  comments        Comment[]  @relation("UserComments")
+  followedBy      Follow[]   @relation("UserFollowedBy")
+  following       Follow[]   @relation("UserFollowing")
+  miniApps        MiniApp[]  @relation("UserMiniApps")
 }
 
 model Post {
-  id          Int       @id @default(autoincrement())
-  content     String
-  mediaUrl    String?
-  viewsCount  Int       @default(0)
-  isEdited    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  authorId    Int
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  likes       Like[]
-  comments    Comment[]
+  id         Int       @id @default(autoincrement())
+  content    String
+  mediaUrl   String?
+  viewsCount Int       @default(0)
+  isEdited   Boolean   @default(false)
+  authorId   Int
+  author     User      @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  likes      Like[]    @relation("PostLikes")
+  comments   Comment[] @relation("PostComments")
 }
 
 model Like {
   id        Int      @id @default(autoincrement())
   userId    Int
   postId    Int
+  user      User     @relation("UserLikes", fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation("PostLikes", fields: [postId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -73,23 +63,32 @@ model Like {
 model Comment {
   id        Int      @id @default(autoincrement())
   content   String
-  createdAt DateTime @default(now())
   authorId  Int
   postId    Int
+  author    User     @relation("UserComments", fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post     @relation("PostComments", fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
 
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+model Follow {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowedBy", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
 }
 
 model MiniApp {
   id          Int      @id @default(autoincrement())
   title       String
-  description String
+  description String?
   url         String
   icon        String?
-  category    String   @default("UTILITY")
   authorId    Int
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User     @relation("UserMiniApps", fields: [authorId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 }
 
