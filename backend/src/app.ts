@@ -6,6 +6,7 @@ import { config } from './config';
 import { encryptField, decryptField, hashPassword, verifyPassword } from './utils/crypto';
 import { gitWatcher } from './services/gitWatcher';
 import { keyRotation } from './services/keyRotation';
+import { clusterService } from './services/clusterService';
 
 const app = express();
 export const prisma = new PrismaClient();
@@ -30,14 +31,12 @@ const authenticate = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
-// --- AUTH API ---
+// --- AUTH & PROFILE ---
 
 app.get('/api/auth/check-username', async (req: Request, res: Response) => {
   const { username } = req.query;
-  try {
-    const user = await prisma.user.findUnique({ where: { username: String(username) } });
-    res.json({ available: !user });
-  } catch (e) { res.status(500).json({ error: 'DB Error' }); }
+  const user = await prisma.user.findUnique({ where: { username: String(username) } });
+  res.json({ available: !user });
 });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
@@ -48,7 +47,8 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         username,
         password: hashPassword(password),
         email: await encryptField(email),
-        firstName: firstName || username
+        firstName: firstName || username,
+        nodeId: config.nodeId // Привязка пользователя к узлу
       }
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
@@ -66,9 +66,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   res.json({ token, user });
 });
 
-app.get('/api/auth/me', authenticate, async (req: any, res: Response) => {
-  res.json(req.user);
-});
+app.get('/api/auth/me', authenticate, (req: any, res: Response) => res.json(req.user));
 
 app.put('/api/auth/profile', authenticate, async (req: any, res: Response) => {
   try {
@@ -80,17 +78,15 @@ app.put('/api/auth/profile', authenticate, async (req: any, res: Response) => {
   } catch (e) { res.status(400).json({ error: 'Update failed' }); }
 });
 
-// --- USERS & SOCIAL ---
+// --- SOCIAL API ---
 
 app.get('/api/users/:username', async (req: Request, res: Response) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { username: req.params.username },
-      include: { _count: { select: { followedBy: true, following: true } } }
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+  const user = await prisma.user.findUnique({
+    where: { username: req.params.username },
+    include: { _count: { select: { followedBy: true, following: true } } }
+  });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json(user);
 });
 
 app.post('/api/users/:userId/follow', authenticate, async (req: any, res: Response) => {
@@ -107,59 +103,63 @@ app.post('/api/users/:userId/follow', authenticate, async (req: any, res: Respon
       await (prisma as any).follows.create({ data: { followerId, followingId: targetId } });
       res.json({ following: true });
     }
-  } catch (e) { res.status(400).json({ error: 'Follow failed' }); }
+  } catch (e) { res.status(400).json({ error: 'Action failed' }); }
 });
 
-// --- CLUSTER ---
-
-app.post('/api/cluster/register', async (req: Request, res: Response) => {
-  const { nodeId, url, owner, secret } = req.body;
-  if (secret !== config.clusterSecret) return res.status(403).json({ error: 'Wrong cluster secret' });
-  try {
-    const node = await prisma.clusterNode.upsert({
-      where: { id: nodeId },
-      update: { url, lastSeen: new Date(), status: 'active' },
-      create: { id: nodeId, url, owner, status: 'active' }
-    });
-    res.json({ status: 'registered', node });
-  } catch (e) { res.status(500).json({ error: 'Cluster registration failed' }); }
-});
-
-app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
-  const { nodeId } = req.body;
-  try {
-    await prisma.clusterNode.update({ where: { id: nodeId }, data: { lastSeen: new Date(), status: 'active' } });
-    res.json({ ok: true });
-  } catch (e) { res.status(404).json({ error: 'Node not found' }); }
-});
-
-// --- POSTS ---
+// --- CONTENT API ---
 
 app.get('/api/posts', async (req: Request, res: Response) => {
   const { username } = req.query;
-  try {
-    const posts = await prisma.post.findMany({
-      where: username ? { author: { username: String(username) } } : {},
-      include: { author: { select: { username: true, firstName: true, avatar: true } } },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(posts);
-  } catch (e) { res.status(500).json({ error: 'Posts load failed' }); }
+  const posts = await prisma.post.findMany({
+    where: username ? { author: { username: String(username) } } : {},
+    include: { author: { select: { username: true, firstName: true, avatar: true } }, _count: { select: { likes: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 50
+  });
+  res.json(posts);
 });
 
 app.post('/api/posts', authenticate, async (req: any, res: Response) => {
-  try {
-    const post = await prisma.post.create({
-      data: { content: req.body.content, authorId: req.user.id },
-      include: { author: { select: { username: true, firstName: true, avatar: true } } }
-    });
-    res.json(post);
-  } catch (e) { res.status(400).json({ error: 'Post creation failed' }); }
+  const post = await prisma.post.create({
+    data: { content: req.body.content, authorId: req.user.id },
+    include: { author: { select: { username: true, firstName: true, avatar: true } } }
+  });
+  res.json(post);
 });
 
-async function init() {
+// --- CLUSTER MESH ---
+
+app.post('/api/cluster/register', async (req: Request, res: Response) => {
+  if (!config.isMasterNode) return res.status(403).json({ error: 'Only Master accepts registrations' });
+  const { nodeId, url, secret } = req.body;
+  if (secret !== config.clusterSecret) return res.status(403).json({ error: 'Forbidden' });
+  
+  const node = await prisma.clusterNode.upsert({
+    where: { id: nodeId },
+    update: { url, lastSeen: new Date(), status: 'active' },
+    create: { id: nodeId, url, status: 'active' }
+  });
+  res.json({ status: 'ok', node });
+});
+
+app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
+  if (!config.isMasterNode) return res.status(403).json({ error: 'Only Master' });
+  await prisma.clusterNode.update({ where: { id: req.body.nodeId }, data: { lastSeen: new Date(), status: 'active' } });
+  res.json({ ok: true });
+});
+
+async function bootstrap() {
   gitWatcher.start();
   await keyRotation.start();
-  app.listen(config.port, '0.0.0.0', () => console.log(`🚀 MASTER Node: ${config.port}`));
+  
+  if (!config.isMasterNode) {
+    await clusterService.registerWithMaster('System');
+    clusterService.sendHeartbeat();
+  }
+
+  app.listen(config.port, '0.0.0.0', () => {
+    console.log(`🚀 Z-Node [${config.isMasterNode ? 'MASTER' : 'COMMUNITY'}] running on port ${config.port}`);
+  });
 }
-init();
+
+bootstrap().catch(console.error);
