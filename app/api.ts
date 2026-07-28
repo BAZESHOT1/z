@@ -6,77 +6,47 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
-function getHeaders() {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  return headers;
-}
+async function request(path: string, options: RequestInit = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+    ...options.headers
+  };
 
-export async function fetchCurrentUser() {
-  if (!authToken) return null;
   try {
-    const res = await fetch(`${API_URL}/api/auth/me`, { headers: getHeaders() });
+    const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    
     if (res.status === 401) {
-      setAuthToken(null);
+      authToken = null; // Сброс при неверном токене
       return null;
     }
-    return res.ok ? await res.json() : null;
-  } catch (e) { return null; }
-}
-
-export async function loginUser(data: any) {
-  const res = await fetch(`${API_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || 'Auth failed');
-  return json;
-}
-
-export async function fetchPosts(username?: string) {
-  const url = username ? `${API_URL}/api/posts?username=${username}` : `${API_URL}/api/posts`;
-  try {
-    const res = await fetch(url, { headers: getHeaders() });
+    
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'Request failed');
+    }
+    
     return await res.json();
-  } catch (e) { return []; }
+  } catch (e: any) {
+    console.error(`API Error [${path}]:`, e.message);
+    // Если произошел сброс соединения, возвращаем пустую структуру или выбрасываем понятную ошибку
+    if (e.message.includes('fetch')) throw new Error('Сервер временно недоступен');
+    throw e;
+  }
 }
 
-export async function createPost(content: string) {
-  const res = await fetch(`${API_URL}/api/posts`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ content }),
-  });
-  return await res.json();
-}
+export const fetchCurrentUser = () => request('/api/auth/me');
+export const loginUser = (data: any) => request('/api/auth/login', { method: 'POST', body: JSON.stringify(data) });
+export const registerUser = (data: any) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) });
+export const checkUsername = (username: string) => request(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
 
-export async function toggleLike(postId: number) {
-  const res = await fetch(`${API_URL}/api/posts/${postId}/like`, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-  return await res.json();
-}
+export const fetchPosts = (username?: string) => 
+  request(`/api/posts${username ? `?username=${username}` : ''}`).then(res => res || []);
 
-export async function checkUsername(username: string) {
-  const res = await fetch(`${API_URL}/api/auth/check-username?username=${encodeURIComponent(username)}`);
-  return await res.json();
-}
+export const createPost = (content: string) => 
+  request('/api/posts', { method: 'POST', body: JSON.stringify({ content }) });
 
-export async function registerUser(data: any) {
-  const res = await fetch(`${API_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  });
-  return await res.json();
-}
+export const toggleLike = (postId: number) => 
+  request(`/api/posts/${postId}/like`, { method: 'POST' });
 
-export async function fetchUserProfile(username: string) {
-  const res = await fetch(`${API_URL}/api/users/${username}`, { headers: getHeaders() });
-  return res.ok ? await res.json() : null;
-}
+export const fetchUserProfile = (username: string) => request(`/api/users/${username}`);
