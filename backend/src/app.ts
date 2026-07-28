@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { config } from './config';
-import { encryptField, hashPassword, verifyPassword } from './utils/crypto';
+import { hashPassword, verifyPassword } from './utils/crypto';
 import { gitWatcher } from './services/gitWatcher';
 import { keyRotation } from './services/keyRotation';
 import { clusterService } from './services/clusterService';
@@ -22,35 +22,21 @@ app.use(express.json());
 function ensureStorageBuckets() {
   console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 📂 Проверка структуры хранилища...');
   const folders = ['uploads', 'uploads/avatars', 'uploads/posts', 'uploads/media'];
-  let createdCount = 0;
-  
   folders.forEach(folder => {
     const fullPath = path.join(process.cwd(), folder);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
-      console.log(`  └─ ✨ Создан новый бакет: ${folder}`);
-      createdCount++;
-    }
+    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
   });
-  
-  if (createdCount === 0) {
-    console.log('  └─ ✅ Все папки на месте.');
-  }
 }
 
 function syncDatabase() {
   console.log('\x1b[35m%s\x1b[0m', '[DATABASE] 🔄 Синхронизация структуры БД...');
   try {
-    console.log('  ├─ 🛠️  Генерация Prisma Client...');
-    execSync('npx prisma generate', { stdio: 'pipe' });
-    
-    console.log('  ├─ 📦 Обновление схемы данных (Safe Push)...');
-    execSync('npx prisma db push --skip-generate', { stdio: 'pipe' });
-    
+    // Явно генерируем клиент и пушим схему
+    execSync('npx prisma generate', { stdio: 'inherit' });
+    execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
     console.log('  └─ ✅ База данных успешно синхронизирована.');
   } catch (e: any) {
-    console.error('\x1b[31m%s\x1b[0m', '  └─ ❌ Ошибка синхронизации БД!');
-    console.error(`     Детали: ${e.message}`);
+    console.error('  └─ ❌ Ошибка синхронизации БД:', e.message);
   }
 }
 
@@ -72,7 +58,20 @@ const authenticate = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
-// --- ROUTES ---
+// --- AUTH ROUTES ---
+
+app.get('/api/auth/me', authenticate, (req: any, res) => {
+  res.json(req.user);
+});
+
+app.get('/api/auth/check-username', async (req, res) => {
+  const { username } = req.query;
+  if (!username) return res.status(400).json({ error: 'Username is required' });
+  try {
+    const user = await prisma.user.findUnique({ where: { username: String(username) } });
+    res.json({ available: !user });
+  } catch (e) { res.status(500).json({ error: 'Check failed' }); }
+});
 
 app.post('/api/auth/register', async (req, res) => {
   const { username, password, email, firstName } = req.body;
@@ -88,7 +87,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.status(201).json({ token, user });
-  } catch (e) { res.status(400).json({ error: 'User registration failed' }); }
+  } catch (e) { res.status(400).json({ error: 'Registration failed' }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -103,23 +102,44 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Login error' }); }
 });
 
+// --- USER & POST ROUTES ---
+
+app.get('/api/users/:username', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: req.params.username },
+      include: { _count: { select: { posts: true, likes: true } } }
+    });
+    if (!user) return res.status(404).json({ error: 'Not found' });
+    res.json(user);
+  } catch (e) { res.status(500).json({ error: 'Fetch failed' }); }
+});
+
 app.get('/api/posts', async (req, res) => {
   try {
     const { username } = req.query;
-    const posts = await prisma.post.findMany({
-      where: username ? { author: { username: String(username) } } : {},
-      include: { 
-        author: { select: { username: true, firstName: true, avatar: true } },
-        _count: { select: { likes: true, comments: true } }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50
-    });
-    res.json(posts);
-  } catch (e: any) {
-    console.error('[API] Ошибка загрузки постов:', e.message);
-    res.json([]);
-  }
+    // Безопасная выборка: если _count еще не готов в клиенте, пробуем без него
+    try {
+      const posts = await prisma.post.findMany({
+        where: username ? { author: { username: String(username) } } : {},
+        include: { 
+          author: { select: { username: true, firstName: true, avatar: true } },
+          _count: { select: { likes: true, comments: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50
+      });
+      return res.json(posts);
+    } catch (innerErr) {
+       const fallback = await prisma.post.findMany({
+         where: username ? { author: { username: String(username) } } : {},
+         include: { author: { select: { username: true, firstName: true, avatar: true } } },
+         orderBy: { createdAt: 'desc' },
+         take: 50
+       });
+       return res.json(fallback);
+    }
+  } catch (e: any) { res.json([]); }
 });
 
 app.post('/api/posts', authenticate, async (req: any, res) => {
@@ -143,7 +163,6 @@ async function bootstrap() {
   console.log('\x1b[36m%s\x1b[0m', '[SYSTEM] 🔌 Инициализация Prisma Client...');
   prisma = new PrismaClient();
   
-  console.log('\x1b[36m%s\x1b[0m', '[SERVICES] 🛰️  Запуск фоновых служб...');
   gitWatcher.start();
   await keyRotation.start();
   
@@ -153,13 +172,11 @@ async function bootstrap() {
   }
   
   console.log('\n\x1b[32m%s\x1b[0m', `✅ ВСЕ СИСТЕМЫ ГОТОВЫ. ПОРТ: ${config.port}\n`);
-  
   app.listen(config.port, '0.0.0.0');
 }
 
 bootstrap().catch(err => {
-  console.error('\n\x1b[31m%s\x1b[0m', '❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:');
-  console.error(err);
+  console.error('\x1b[31m%s\x1b[0m', '❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:', err);
   process.exit(1);
 });
 
