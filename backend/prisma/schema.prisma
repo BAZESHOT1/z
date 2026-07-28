@@ -19,7 +19,7 @@ model User {
   socialLinks     String?
   birthDate       String?
   role            String     @default("USER") // USER, MODERATOR, ADMIN, ROOT
-  privacyProfile  String     @default("EVERYONE")
+  privacyProfile  String     @default("EVERYONE") // EVERYONE, FRIENDS, NOBODY
   privacyMessages String     @default("EVERYONE")
   privacyPosts    String     @default("EVERYONE")
   createdAt       DateTime   @default(now())
@@ -28,6 +28,20 @@ model User {
   likes           Like[]
   comments        Comment[]
   miniApps        MiniApp[]
+  followers       Follow[]   @relation("followingUser")
+  following       Follow[]   @relation("followerUser")
+}
+
+model Follow {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("followerUser", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("followingUser", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
 }
 
 model Post {
@@ -39,7 +53,7 @@ model Post {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   authorId    Int
-  author      User      @relation(fields: [authorId], references: [id])
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   likes       Like[]
   comments    Comment[]
 }
@@ -49,8 +63,9 @@ model Like {
   userId    Int
   postId    Int
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -61,8 +76,9 @@ model Comment {
   createdAt DateTime @default(now())
   authorId  Int
   postId    Int
-  author    User     @relation(fields: [authorId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model MiniApp {
@@ -73,7 +89,7 @@ model MiniApp {
   icon        String?
   category    String   @default("UTILITY")
   authorId    Int
-  author      User     @relation(fields: [authorId], references: [id])
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 }
 
