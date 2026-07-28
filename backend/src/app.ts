@@ -13,6 +13,7 @@ export const prisma = new PrismaClient();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
+// Middleware для авторизации
 const authenticate = async (req: any, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
@@ -29,7 +30,16 @@ const authenticate = async (req: any, res: Response, next: NextFunction) => {
   }
 };
 
-// --- AUTH ---
+// --- AUTH API ---
+
+app.get('/api/auth/check-username', async (req: Request, res: Response) => {
+  const { username } = req.query;
+  try {
+    const user = await prisma.user.findUnique({ where: { username: String(username) } });
+    res.json({ available: !user });
+  } catch (e) { res.status(500).json({ error: 'DB Error' }); }
+});
+
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { username, password, email, firstName } = req.body;
   try {
@@ -43,7 +53,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     });
     const token = jwt.sign({ userId: user.id }, config.jwtSecret);
     res.status(201).json({ token, user });
-  } catch (e) { res.status(400).json({ error: 'Username taken' }); }
+  } catch (e) { res.status(400).json({ error: 'Registration failed' }); }
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
@@ -60,45 +70,91 @@ app.get('/api/auth/me', authenticate, async (req: any, res: Response) => {
   res.json(req.user);
 });
 
-// --- CLUSTER (Для связи с Community узлами) ---
+app.put('/api/auth/profile', authenticate, async (req: any, res: Response) => {
+  try {
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: req.body
+    });
+    res.json(updated);
+  } catch (e) { res.status(400).json({ error: 'Update failed' }); }
+});
+
+// --- USERS & SOCIAL ---
+
+app.get('/api/users/:username', async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: req.params.username },
+      include: { _count: { select: { followedBy: true, following: true } } }
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/users/:userId/follow', authenticate, async (req: any, res: Response) => {
+  const targetId = parseInt(req.params.userId);
+  const followerId = req.user.id;
+  try {
+    const existing = await (prisma as any).follows.findUnique({
+      where: { followerId_followingId: { followerId, followingId: targetId } }
+    });
+    if (existing) {
+      await (prisma as any).follows.delete({ where: { followerId_followingId: { followerId, followingId: targetId } } });
+      res.json({ following: false });
+    } else {
+      await (prisma as any).follows.create({ data: { followerId, followingId: targetId } });
+      res.json({ following: true });
+    }
+  } catch (e) { res.status(400).json({ error: 'Follow failed' }); }
+});
+
+// --- CLUSTER ---
+
 app.post('/api/cluster/register', async (req: Request, res: Response) => {
   const { nodeId, url, owner, secret } = req.body;
   if (secret !== config.clusterSecret) return res.status(403).json({ error: 'Wrong cluster secret' });
-
-  const node = await prisma.clusterNode.upsert({
-    where: { id: nodeId },
-    update: { url, lastSeen: new Date(), status: 'active' },
-    create: { id: nodeId, url, owner, status: 'active' }
-  });
-  res.json({ status: 'registered', node });
+  try {
+    const node = await prisma.clusterNode.upsert({
+      where: { id: nodeId },
+      update: { url, lastSeen: new Date(), status: 'active' },
+      create: { id: nodeId, url, owner, status: 'active' }
+    });
+    res.json({ status: 'registered', node });
+  } catch (e) { res.status(500).json({ error: 'Cluster registration failed' }); }
 });
 
 app.post('/api/cluster/heartbeat', async (req: Request, res: Response) => {
   const { nodeId } = req.body;
-  await prisma.clusterNode.update({
-    where: { id: nodeId },
-    data: { lastSeen: new Date(), status: 'active' }
-  });
-  res.json({ ok: true });
+  try {
+    await prisma.clusterNode.update({ where: { id: nodeId }, data: { lastSeen: new Date(), status: 'active' } });
+    res.json({ ok: true });
+  } catch (e) { res.status(404).json({ error: 'Node not found' }); }
 });
 
 // --- POSTS ---
+
 app.get('/api/posts', async (req: Request, res: Response) => {
   const { username } = req.query;
-  const posts = await prisma.post.findMany({
-    where: username ? { author: { username: String(username) } } : {},
-    include: { author: { select: { username: true, firstName: true, avatar: true } } },
-    orderBy: { createdAt: 'desc' }
-  });
-  res.json(posts);
+  try {
+    const posts = await prisma.post.findMany({
+      where: username ? { author: { username: String(username) } } : {},
+      include: { author: { select: { username: true, firstName: true, avatar: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(posts);
+  } catch (e) { res.status(500).json({ error: 'Posts load failed' }); }
 });
 
 app.post('/api/posts', authenticate, async (req: any, res: Response) => {
-  const post = await prisma.post.create({
-    data: { content: req.body.content, authorId: req.user.id },
-    include: { author: { select: { username: true, firstName: true, avatar: true } } }
-  });
-  res.json(post);
+  try {
+    const post = await prisma.post.create({
+      data: { content: req.body.content, authorId: req.user.id },
+      include: { author: { select: { username: true, firstName: true, avatar: true } } }
+    });
+    res.json(post);
+  } catch (e) { res.status(400).json({ error: 'Post creation failed' }); }
 });
 
 async function init() {
