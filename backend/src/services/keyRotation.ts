@@ -4,11 +4,13 @@ import { prisma } from '../prisma';
 
 class KeyRotationService {
   public async start() {
+    // Проверка раз в сутки
     cron.schedule('0 0 * * *', () => this.rotateIfNeeded());
     await this.rotateIfNeeded();
   }
 
   private async rotateIfNeeded() {
+    if (!prisma) return; // Защита от раннего вызова
     try {
       const latestKey = await prisma.encryptionKey.findFirst({
         orderBy: { createdAt: 'desc' }
@@ -18,7 +20,7 @@ class KeyRotationService {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       if (!latestKey || latestKey.createdAt < thirtyDaysAgo) {
-        console.log('[KeyRotation] 🔑 Генерация нового ключа шифрования...');
+        console.log('[KeyRotation] 🔑 Ротация ключей...');
         await prisma.encryptionKey.create({
           data: {
             key: crypto.randomBytes(32).toString('hex'),
@@ -27,7 +29,7 @@ class KeyRotationService {
         });
       }
     } catch (e: any) {
-      console.error('[KeyRotation] ❌ Ошибка:', e.message);
+      console.error('[KeyRotation] ❌ Ошибка ротации:', e.message);
     }
   }
 }
