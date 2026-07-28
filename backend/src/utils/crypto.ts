@@ -1,60 +1,85 @@
 import crypto from 'crypto';
-import { config } from '../config';
+import { prisma } from '../app';
 
-// Вычисление 32-байтного ключа шифрования на основе JWT_SECRET
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(config.jwtSecret || 'default_secret').digest();
 const ALGORITHM = 'aes-256-gcm';
 
-// Хэширование пароля (Scrypt с солью)
+// Кеш для ключей, чтобы не ходить в базу при каждой операции
+let keyCache: Record<number, Buffer> = {};
+
+async function getKey(version?: number): Promise<{ id: number, key: Buffer }> {
+  const p = prisma as any;
+  
+  if (version && keyCache[version]) {
+    return { id: version, key: keyCache[version] };
+  }
+
+  // Если версия не указана, берем самый новый ключ
+  const keyRecord = version 
+    ? await p.encryptionKey.findUnique({ where: { id: version } })
+    : await p.encryptionKey.findFirst({ orderBy: { createdAt: 'desc' } });
+
+  if (!keyRecord) {
+    throw new Error('No encryption keys found in database');
+  }
+
+  const keyBuffer = Buffer.from(keyRecord.key, 'hex');
+  keyCache[keyRecord.id] = keyBuffer;
+  return { id: keyRecord.id, key: keyBuffer };
+}
+
+export async function encryptField(plainText: string | null | undefined): Promise<string | null> {
+  if (!plainText) return null;
+  try {
+    const { id, key } = await getKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    
+    let encrypted = cipher.update(plainText, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    
+    // Формат: v[ID]:iv:authTag:encrypted
+    return `v${id}:${iv.toString('hex')}:${authTag}:${encrypted}`;
+  } catch (err) {
+    console.error('Encryption failed:', err);
+    return plainText;
+  }
+}
+
+export async function decryptField(encryptedText: string | null | undefined): Promise<string | null> {
+  if (!encryptedText || !encryptedText.startsWith('v')) return encryptedText || null;
+  
+  try {
+    const parts = encryptedText.split(':');
+    if (parts.length !== 4) return encryptedText;
+    
+    const version = parseInt(parts[0].replace('v', ''));
+    const iv = Buffer.from(parts[1], 'hex');
+    const authTag = Buffer.from(parts[2], 'hex');
+    const encrypted = parts[3];
+    
+    const { key } = await getKey(version);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    return encryptedText;
+  }
+}
+
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const derivedKey = crypto.scryptSync(password, salt, 64);
   return `${salt}:${derivedKey.toString('hex')}`;
 }
 
-// Проверка пароля
 export function verifyPassword(password: string, combined: string): boolean {
   if (!combined || !combined.includes(':')) return false;
   const [salt, keyHex] = combined.split(':');
   const keyBuffer = Buffer.from(keyHex, 'hex');
   const derivedKey = crypto.scryptSync(password, salt, 64);
   return crypto.timingSafeEqual(keyBuffer, derivedKey);
-}
-
-// Шифрование данных конфиденциальных полей (Bio, SocialLinks, BirthDate)
-export function encryptField(plainText: string | null | undefined): string | null {
-  if (!plainText) return null;
-  try {
-    const iv = crypto.randomBytes(12); // 96-битный IV для GCM
-    const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-    let encrypted = cipher.update(plainText, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag().toString('hex');
-    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
-  } catch (err) {
-    console.error('Ошибка шифрования поля:', err);
-    return plainText;
-  }
-}
-
-// Расшифровка данных полей
-export function decryptField(encryptedText: string | null | undefined): string | null {
-  if (!encryptedText) return null;
-  if (!encryptedText.includes(':')) return encryptedText; // Возвращаем как есть, если строка не зашифрована
-  
-  try {
-    const parts = encryptedText.split(':');
-    if (parts.length !== 3) return encryptedText;
-    
-    const [ivHex, authTagHex, encrypted] = parts;
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    return encryptedText; // В случае ошибки декодирования возвращаем исходную строку
-  }
 }
