@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { useTheme } from '../app/themeContext';
 
 interface DockItem {
   id: string;
@@ -15,10 +16,12 @@ interface DockProps {
   panelHeight?: number;
 }
 
-export default function Dock({ items, activeTab, panelHeight = 70 }: DockProps) {
+export default function Dock({ items, activeTab, panelHeight = 64 }: DockProps) {
+  const { colors } = useTheme();
+
   return (
     <View style={[styles.dockContainer, { height: panelHeight }]}>
-      <View style={styles.dockWrapper}>
+      <View style={[styles.dockWrapper, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
         {items.map((item) => {
           const isActive = activeTab === item.id;
           
@@ -27,15 +30,16 @@ export default function Dock({ items, activeTab, panelHeight = 70 }: DockProps) 
               key={item.id} 
               onPress={item.onClick}
               style={styles.dockItem}
+              activeOpacity={0.7}
             >
               <Animated.View style={[
                 styles.iconWrapper,
-                isActive && styles.iconWrapperActive
+                isActive && { backgroundColor: colors.primary }
               ]}>
                 {item.icon}
               </Animated.View>
               {isActive && (
-                <Text style={styles.dockLabel}>{item.label}</Text>
+                <Text style={[styles.dockLabel, { color: colors.text }]}>{item.label}</Text>
               )}
             </TouchableOpacity>
           );
@@ -53,42 +57,36 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   dockWrapper: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(36, 40, 50, 0.95)',
     borderRadius: 24,
-    padding: 8,
-    gap: 12,
+    padding: 6,
+    gap: 8,
     borderWidth: 1,
-    borderColor: '#42434a',
     shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
     alignItems: 'center',
   },
   dockItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     gap: 6,
   },
   iconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-  iconWrapperActive: {
-    backgroundColor: '#5353ff',
-  },
   dockLabel: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
   }

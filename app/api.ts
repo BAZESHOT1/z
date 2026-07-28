@@ -45,6 +45,10 @@ export const loginUser = (data: any) => request('/api/auth/login', { method: 'PO
 export const registerUser = (data: any) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) });
 export const checkUsername = (username: string) => request(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
 
+// Paginated Feed
+export const fetchFeedPosts = (page: number = 1, limit: number = 10, username?: string) => 
+  request(`/api/posts/feed?page=${page}&limit=${limit}${username ? `&username=${encodeURIComponent(username)}` : ''}`);
+
 export const fetchPosts = (username?: string) => 
   request(`/api/posts${username ? `?username=${encodeURIComponent(username)}` : ''}`).then(res => res || []);
 
@@ -53,6 +57,12 @@ export const createPost = (content: string, mediaUrl?: string) =>
 
 export const toggleLike = (postId: number) => 
   request(`/api/posts/${postId}/like`, { method: 'POST' });
+
+export const fetchComments = (postId: number) => 
+  request(`/api/posts/${postId}/comments`).then(res => res || []);
+
+export const createComment = (postId: number, content: string) => 
+  request(`/api/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
 
 export const fetchUserProfile = (username: string) => request(`/api/users/${encodeURIComponent(username)}`);
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image, ScrollView, Text, TouchableOpacity, ActivityIndicator, SafeAreaView, TextInput, useWindowDimensions, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon, Users } from 'lucide-react-native';
+import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Settings, Edit3, Save, X, Home, MessageSquare, LayoutGrid, User as UserIcon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchUserProfile, fetchCurrentUser, updateProfile, fetchPosts, toggleFollow, setAuthToken, getAvatarUrl, fetchFollowers, fetchFollowing } from '../api';
-import { translations, Language } from '../i18n';
+import { translations } from '../i18n';
+import { useTheme } from '../themeContext';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import Sidebar from '../../components/Sidebar';
 import Dock from '../../components/Dock';
@@ -13,16 +14,16 @@ export default function ProfileScreen() {
   const { username } = useLocalSearchParams();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+  const { colors, lang } = useTheme();
 
   const [user, setUser] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [lang, setLang] = useState<Language>('ru');
   const [followingLoading, setFollowingLoading] = useState(false);
 
-  // Модальные окна для списков
+  // Modals
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [listLoading, setListLoading] = useState(false);
@@ -35,9 +36,6 @@ export default function ProfileScreen() {
   useEffect(() => { loadData(); }, [username]);
 
   const loadData = async () => {
-    const savedLang = await AsyncStorage.getItem('lang') as Language;
-    if (savedLang) setLang(savedLang);
-    
     try {
       const token = await AsyncStorage.getItem('auth_token');
       if (token) setAuthToken(token);
@@ -111,19 +109,18 @@ export default function ProfileScreen() {
   };
 
   const dockItems = [
-    { id: 'feed', icon: <Home size={22} color="#7e8590" />, label: t.home, onClick: () => router.push('/') },
-    { id: 'chats', icon: <MessageSquare size={22} color="#7e8590" />, label: t.chats, onClick: () => router.push('/') },
-    { id: 'apps', icon: <LayoutGrid size={22} color="#7e8590" />, label: t.apps, onClick: () => router.push('/') },
-    { id: 'profile', icon: <UserIcon size={22} color={isOwnProfile ? "#fff" : "#7e8590"} />, label: t.profile, onClick: () => router.push(currentUser ? `/profile/${currentUser.username}` : '/auth/login') },
+    { id: 'feed', icon: <Home size={20} color={colors.textSecondary} />, label: t.home, onClick: () => router.push('/') },
+    { id: 'chats', icon: <MessageSquare size={20} color={colors.textSecondary} />, label: t.chats, onClick: () => router.push('/') },
+    { id: 'apps', icon: <LayoutGrid size={20} color={colors.textSecondary} />, label: t.apps, onClick: () => router.push('/') },
+    { id: 'profile', icon: <UserIcon size={20} color={isOwnProfile ? "#fff" : colors.textSecondary} />, label: t.profile, onClick: () => router.push(currentUser ? `/profile/${currentUser.username}` : '/auth/login') },
   ];
 
-  if (loading && !user) return <View style={styles.center}><ActivityIndicator color="#5353ff" /></View>;
-  if (!user) return <View style={styles.center}><Text style={{color: '#fff'}}>User not found</Text></View>;
+  if (loading && !user) return <View style={[styles.center, { backgroundColor: colors.bg }]}><ActivityIndicator color={colors.primary} /></View>;
+  if (!user) return <View style={[styles.center, { backgroundColor: colors.bg }]}><Text style={{color: colors.text}}>User not found</Text></View>;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={[styles.shell, isDesktop && styles.desktopShell]}>
-        {/* Если мы в чужом профиле, активная вкладка в меню НЕ светится как 'profile' */}
         {isDesktop && (
           <Sidebar 
             activeTab={isOwnProfile ? "profile" : "other"} 
@@ -135,90 +132,94 @@ export default function ProfileScreen() {
                 router.push('/');
               }
             }} 
-            t={t} 
+            t={t}
+            user={currentUser}
           />
         )}
 
         <View style={styles.content}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><ArrowLeft color="#fff" size={24} /></TouchableOpacity>
-              <Text style={styles.headerTitle}>@{user.username}</Text>
+            <View style={[styles.header, { borderColor: colors.cardBorder }]}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><ArrowLeft color={colors.text} size={22} /></TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>@{user.username}</Text>
               {isOwnProfile ? (
-                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}><Settings color="#fff" size={24} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.iconBtn}><Settings color={colors.text} size={22} /></TouchableOpacity>
               ) : <View style={{ width: 40 }} />}
             </View>
 
-            <Animated.View entering={FadeIn} style={styles.profileCard}>
+            <Animated.View entering={FadeIn} style={[styles.profileCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
               <View style={styles.avatarWrapper}>
-                <Image source={{ uri: getAvatarUrl(user.username, editForm.avatar || user.avatar) }} style={styles.avatar} />
+                <Image source={{ uri: getAvatarUrl(user.username, editForm.avatar || user.avatar) }} style={[styles.avatar, { borderColor: colors.primary }]} />
               </View>
               
               {editing ? (
                 <View style={styles.editForm}>
                   <TextInput 
-                    style={styles.input} 
-                    placeholder="Ссылка на новый аватар (https://...)" 
-                    placeholderTextColor="#484f58" 
+                    style={[styles.input, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
+                    placeholder="Avatar URL (https://...)" 
+                    placeholderTextColor={colors.textSecondary} 
                     value={editForm.avatar} 
                     onChangeText={v => setEditForm({...editForm, avatar: v})} 
                   />
                   <View style={styles.inputRow}>
                     <TextInput 
-                      style={[styles.input, { flex: 1 }]} 
+                      style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
                       placeholder={t.firstName} 
-                      placeholderTextColor="#484f58" 
+                      placeholderTextColor={colors.textSecondary} 
                       value={editForm.firstName} 
                       onChangeText={v => setEditForm({...editForm, firstName: v})} 
                     />
                     <TextInput 
-                      style={[styles.input, { flex: 1 }]} 
+                      style={[styles.input, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
                       placeholder={t.lastName} 
-                      placeholderTextColor="#484f58" 
+                      placeholderTextColor={colors.textSecondary} 
                       value={editForm.lastName} 
                       onChangeText={v => setEditForm({...editForm, lastName: v})} 
                     />
                   </View>
                   <TextInput 
-                    style={[styles.input, styles.textArea]} 
+                    style={[styles.input, styles.textArea, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]} 
                     placeholder={t.bio} 
-                    placeholderTextColor="#484f58" 
+                    placeholderTextColor={colors.textSecondary} 
                     multiline 
                     value={editForm.bio} 
                     onChangeText={v => setEditForm({...editForm, bio: v})} 
                   />
                   <View style={styles.editActions}>
-                    <TouchableOpacity style={[styles.miniBtn, styles.cancelBtn]} onPress={() => setEditing(false)}>
+                    <TouchableOpacity style={[styles.miniBtn, { backgroundColor: colors.cardBorder }]} onPress={() => setEditing(false)}>
                       <X size={18} color="#fff" /><Text style={styles.btnText}>{t.back}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.miniBtn, styles.saveBtn]} onPress={handleSave}>
+                    <TouchableOpacity style={[styles.miniBtn, { backgroundColor: '#238636' }]} onPress={handleSave}>
                       <Save size={18} color="#fff" /><Text style={styles.btnText}>{t.save}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               ) : (
                 <>
-                  <Text style={styles.name}>{user.firstName || user.username} {user.lastName || ''}</Text>
-                  <Text style={styles.bioText}>{user.bio || 'Участник сети Z'}</Text>
+                  <Text style={[styles.name, { color: colors.text }]}>{user.firstName || user.username} {user.lastName || ''}</Text>
+                  <Text style={[styles.bioText, { color: colors.textSecondary }]}>{user.bio || 'Z Network member'}</Text>
                   
                   <View style={styles.stats}>
                     <TouchableOpacity style={styles.statItem} onPress={() => openListModal('followers')}>
-                      <Text style={styles.statNum}>{user._count?.followers || 0}</Text>
-                      <Text style={styles.statLabel}>{t.followers}</Text>
+                      <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.followers || 0}</Text>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.followers}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.statItem} onPress={() => openListModal('following')}>
-                      <Text style={styles.statNum}>{user._count?.following || 0}</Text>
-                      <Text style={styles.statLabel}>{t.following}</Text>
+                      <Text style={[styles.statNum, { color: colors.text }]}>{user._count?.following || 0}</Text>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t.following}</Text>
                     </TouchableOpacity>
                   </View>
 
                   <View style={styles.actions}>
                     {isOwnProfile ? (
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}><Edit3 size={18} color="#fff" /><Text style={styles.btnText}>{t.editProfile}</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => setEditing(true)}>
+                        <Edit3 size={18} color="#fff" />
+                        <Text style={styles.btnText}>{t.editProfile}</Text>
+                      </TouchableOpacity>
                     ) : (
                       <>
                         <TouchableOpacity 
-                          style={[styles.actionBtn, user.isFollowing && styles.followingBtn]} 
+                          style={[styles.actionBtn, { backgroundColor: user.isFollowing ? colors.cardBorder : colors.primary }]} 
                           onPress={handleFollow}
                           disabled={followingLoading}
                         >
@@ -229,7 +230,10 @@ export default function ProfileScreen() {
                             </>
                           }
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionBtn, styles.msgBtn]}><MessageCircle size={18} color="#fff" /><Text style={styles.btnText}>{t.message}</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBorder }]}>
+                          <MessageCircle size={18} color="#fff" />
+                          <Text style={styles.btnText}>{t.message}</Text>
+                        </TouchableOpacity>
                       </>
                     )}
                   </View>
@@ -239,15 +243,15 @@ export default function ProfileScreen() {
 
             {!editing && (
               <View style={styles.feedArea}>
-                 <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{t.posts}</Text></View>
+                 <View style={styles.sectionHeader}><Text style={[styles.sectionTitle, { color: colors.text }]}>{t.posts}</Text></View>
                  {posts.length === 0 ? (
-                   <Text style={styles.emptyText}>Пока нет публикаций</Text>
+                   <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Пока нет публикаций</Text>
                  ) : (
                    posts.map((p, idx) => (
-                      <Animated.View key={p.id} entering={SlideInDown.delay(idx * 100)} style={styles.postCard}>
-                        <Text style={styles.postContent}>{p.content}</Text>
+                      <Animated.View key={p.id} entering={SlideInDown.delay(idx * 80)} style={[styles.postCard, { backgroundColor: colors.postCardBg, borderColor: colors.cardBorder }]}>
+                        <Text style={[styles.postContent, { color: colors.text }]}>{p.content}</Text>
                         {p.mediaUrl && <Image source={{ uri: p.mediaUrl }} style={styles.postMedia} resizeMode="cover" />}
-                        <Text style={styles.postDate}>{new Date(p.createdAt).toLocaleDateString()}</Text>
+                        <Text style={[styles.postDate, { color: colors.textSecondary }]}>{new Date(p.createdAt).toLocaleDateString()}</Text>
                       </Animated.View>
                    ))
                  )}
@@ -255,29 +259,29 @@ export default function ProfileScreen() {
             )}
           </ScrollView>
 
-          {/* Модальное окно списка подписчиков/подписок */}
+          {/* Modal */}
           <Modal visible={modalType !== null} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
+              <View style={[styles.modalContent, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>
                     {modalType === 'followers' ? t.followers : t.following}
                   </Text>
                   <TouchableOpacity onPress={() => setModalType(null)}>
-                    <X size={24} color="#fff" />
+                    <X size={22} color={colors.text} />
                   </TouchableOpacity>
                 </View>
 
                 {listLoading ? (
-                  <ActivityIndicator color="#5353ff" style={{ marginVertical: 30 }} />
+                  <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} />
                 ) : usersList.length === 0 ? (
-                  <Text style={styles.emptyText}>Список пуст</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Список пуст</Text>
                 ) : (
                   <ScrollView style={{ maxHeight: 350 }}>
                     {usersList.map((u) => (
                       <TouchableOpacity 
                         key={u.id} 
-                        style={styles.userRow}
+                        style={[styles.userRow, { borderBottomColor: colors.subtleBorder }]}
                         onPress={() => {
                           setModalType(null);
                           router.push(`/profile/${u.username}`);
@@ -285,8 +289,8 @@ export default function ProfileScreen() {
                       >
                         <Image source={{ uri: getAvatarUrl(u.username, u.avatar) }} style={styles.rowAvatar} />
                         <View>
-                          <Text style={styles.rowName}>{u.firstName || u.username}</Text>
-                          <Text style={styles.rowMeta}>@{u.username}</Text>
+                          <Text style={[styles.rowName, { color: colors.text }]}>{u.firstName || u.username}</Text>
+                          <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>@{u.username}</Text>
                         </View>
                       </TouchableOpacity>
                     ))}
@@ -304,51 +308,47 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0d1117' },
+  container: { flex: 1 },
   shell: { flex: 1 },
   desktopShell: { flexDirection: 'row' },
   content: { flex: 1 },
   scrollContent: { paddingBottom: 100 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0d1117' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderColor: '#30363d' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
+  headerTitle: { fontSize: 18, fontWeight: '800' },
   iconBtn: { padding: 8 },
-  profileCard: { alignItems: 'center', padding: 32, backgroundColor: '#161b22', borderBottomLeftRadius: 32, borderBottomRightRadius: 32, borderWidth: 1, borderColor: '#30363d', margin: 10 },
-  avatarWrapper: { position: 'relative', marginBottom: 16 },
-  avatar: { width: 110, height: 110, borderRadius: 55, borderWidth: 4, borderColor: '#5353ff' },
-  name: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  bioText: { color: '#8b949e', textAlign: 'center', marginTop: 8, fontSize: 15, paddingHorizontal: 20 },
-  stats: { flexDirection: 'row', gap: 40, marginTop: 24 },
+  profileCard: { alignItems: 'center', padding: 28, borderRadius: 24, borderWidth: 1, margin: 12 },
+  avatarWrapper: { position: 'relative', marginBottom: 14 },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3 },
+  name: { fontSize: 22, fontWeight: '900' },
+  bioText: { textAlign: 'center', marginTop: 6, fontSize: 14, paddingHorizontal: 16 },
+  stats: { flexDirection: 'row', gap: 36, marginTop: 20 },
   statItem: { alignItems: 'center' },
-  statNum: { color: '#fff', fontWeight: '800', fontSize: 18 },
-  statLabel: { color: '#8b949e', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 32, width: '100%', maxWidth: 400 },
-  actionBtn: { flex: 1, backgroundColor: '#5353ff', flexDirection: 'row', height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  followingBtn: { backgroundColor: '#21262d', borderWidth: 1, borderColor: '#30363d' },
-  msgBtn: { backgroundColor: '#21262d', borderWidth: 1, borderColor: '#30363d' },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  editForm: { width: '100%', gap: 12, marginTop: 10 },
+  statNum: { fontWeight: '800', fontSize: 18 },
+  statLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 24, width: '100%', maxWidth: 380 },
+  actionBtn: { flex: 1, flexDirection: 'row', height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  editForm: { width: '100%', gap: 10, marginTop: 10 },
   inputRow: { flexDirection: 'row', gap: 10 },
-  input: { backgroundColor: '#0d1117', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#30363d', fontSize: 14 },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  input: { padding: 12, borderRadius: 8, borderWidth: 1, fontSize: 14 },
+  textArea: { minHeight: 70, textAlignVertical: 'top' },
   editActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  miniBtn: { flex: 1, height: 44, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  cancelBtn: { backgroundColor: '#30363d' },
-  saveBtn: { backgroundColor: '#238636' },
-  feedArea: { padding: 20 },
-  sectionHeader: { marginBottom: 16 },
-  sectionTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
-  postCard: { backgroundColor: '#161b22', padding: 20, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#30363d' },
-  postContent: { color: '#c9d1d9', lineHeight: 22, fontSize: 15 },
+  miniBtn: { flex: 1, height: 40, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  feedArea: { padding: 16 },
+  sectionHeader: { marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '800' },
+  postCard: { padding: 18, borderRadius: 18, marginBottom: 12, borderWidth: 1 },
+  postContent: { lineHeight: 22, fontSize: 14 },
   postMedia: { width: '100%', height: 200, borderRadius: 12, marginTop: 12 },
-  postDate: { color: '#484f58', fontSize: 12, marginTop: 10 },
-  emptyText: { color: '#8b949e', textAlign: 'center', marginVertical: 20 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#161b22', borderRadius: 20, padding: 20, width: '100%', maxWidth: 440, borderWidth: 1, borderColor: '#30363d' },
+  postDate: { fontSize: 11, marginTop: 10 },
+  emptyText: { textAlign: 'center', marginVertical: 20, fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { borderRadius: 20, padding: 20, width: '100%', maxWidth: 420, borderWidth: 1 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#21262d' },
-  rowAvatar: { width: 40, height: 40, borderRadius: 20 },
-  rowName: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  rowMeta: { color: '#8b949e', fontSize: 13 }
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1 },
+  rowAvatar: { width: 38, height: 38, borderRadius: 19 },
+  rowName: { fontWeight: '700', fontSize: 14 },
+  rowMeta: { fontSize: 12 }
 });

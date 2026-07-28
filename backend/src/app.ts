@@ -15,8 +15,10 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
 
-// Хранилище фолбека для подписок
-const inMemoryFollows = new Set<string>();
+// In-memory fallback stores
+const inMemoryFollows = new Set<string>(); // "followerUsername:followingUsername"
+const inMemoryLikes = new Set<string>();   // "username:postId"
+const inMemoryComments: Record<number, any[]> = {}; // postId -> comment objects array
 
 const BUCKET_DIR = path.join(process.cwd(), 'bucket');
 
@@ -108,7 +110,7 @@ app.get('/api/auth/check-username', async (req, res) => {
   }
 });
 
-// --- ENCRYPTED BUCKET MEDIA UPLOAD & SERVE ---
+// --- MEDIA UPLOAD ---
 app.post('/api/upload', authenticate, (req, res) => {
   try {
     const { file } = req.body;
@@ -130,7 +132,6 @@ app.post('/api/upload', authenticate, (req, res) => {
       buffer = Buffer.from(file, 'utf8');
     }
 
-    // Шифруем буфер файла перед сохранением в бакет
     const encrypted = encryptBuffer(buffer, config.clusterSecret || config.jwtSecret);
     const filename = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
     
@@ -284,27 +285,80 @@ app.get('/api/users/:username/following', async (req, res) => {
   }
 });
 
-// --- POSTS ---
+// --- SMART PAGINATED FEED ---
+app.get('/api/posts/feed', optionalAuth, async (req: any, res) => {
+  try {
+    const page = parseInt(req.query.page as string || '1');
+    const limit = parseInt(req.query.limit as string || '10');
+    const filterUsername = req.query.username as string | undefined;
+    const currentUser = req.user;
+
+    const skip = (page - 1) * limit;
+
+    let posts = await prisma.post.findMany({
+      where: filterUsername ? { author: { username: filterUsername } } : {},
+      include: {
+        author: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit + 1
+    });
+
+    const hasMore = posts.length > limit;
+    if (hasMore) posts.pop();
+
+    const formatted = posts.map(p => {
+      // Calculate likes
+      let likeCount = 0;
+      let isLiked = false;
+      for (const key of inMemoryLikes) {
+        const [u, pId] = key.split(':');
+        if (pId === String(p.id)) {
+          likeCount++;
+          if (currentUser && u === currentUser.username) isLiked = true;
+        }
+      }
+
+      const postComments = inMemoryComments[p.id] || [];
+
+      return {
+        ...p,
+        isLiked,
+        _count: { likes: likeCount, comments: postComments.length }
+      };
+    });
+
+    res.json({
+      posts: formatted,
+      hasMore,
+      page,
+      limit
+    });
+  } catch (e: any) {
+    console.error('Feed error:', e.message);
+    res.status(500).json({ error: 'Feed load error' });
+  }
+});
+
 app.get('/api/posts', async (req, res) => {
   const { username } = req.query;
   try {
     const posts = await prisma.post.findMany({
       where: username ? { author: { username: String(username) } } : {},
       include: { 
-        author: { select: { username: true, firstName: true, avatar: true } }
+        author: { select: { id: true, username: true, firstName: true, avatar: true } }
       },
       orderBy: { createdAt: 'desc' },
       take: 50
     });
-    
-    const formatted = posts.map(p => ({
-      ...p,
-      _count: { likes: 0, comments: 0 }
-    }));
 
-    res.json(formatted);
+    res.json(posts.map(p => ({
+      ...p,
+      isLiked: false,
+      _count: { likes: 0, comments: (inMemoryComments[p.id] || []).length }
+    })));
   } catch (e: any) {
-    console.error('Fetch posts error:', e.message);
     res.json([]);
   }
 });
@@ -313,11 +367,76 @@ app.post('/api/posts', authenticate, async (req: any, res) => {
   try {
     const post = await prisma.post.create({
       data: { content: req.body.content, mediaUrl: req.body.mediaUrl, authorId: req.user.id },
-      include: { author: { select: { username: true, firstName: true, avatar: true } } }
+      include: { author: { select: { id: true, username: true, firstName: true, avatar: true } } }
     });
-    res.json({ ...post, _count: { likes: 0, comments: 0 } });
+    res.json({ ...post, isLiked: false, _count: { likes: 0, comments: 0 } });
   } catch (e: any) {
     res.status(400).json({ error: 'Не удалось создать пост' });
+  }
+});
+
+// LIKE TOGGLE
+app.post('/api/posts/:id/like', authenticate, async (req: any, res) => {
+  try {
+    const postId = req.params.id;
+    const username = req.user.username;
+    const key = `${username}:${postId}`;
+
+    let liked = false;
+    if (inMemoryLikes.has(key)) {
+      inMemoryLikes.delete(key);
+      liked = false;
+    } else {
+      inMemoryLikes.add(key);
+      liked = true;
+    }
+
+    let count = 0;
+    for (const k of inMemoryLikes) {
+      if (k.endsWith(`:${postId}`)) count++;
+    }
+
+    res.json({ liked, count });
+  } catch (e) {
+    res.status(500).json({ error: 'Like toggle failed' });
+  }
+});
+
+// COMMENTS
+app.get('/api/posts/:id/comments', async (req, res) => {
+  try {
+    const postId = parseInt(req.params.id);
+    const comments = inMemoryComments[postId] || [];
+    res.json(comments);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+app.post('/api/posts/:id/comments', authenticate, async (req: any, res) => {
+  try {
+    const postId = parseInt(req.params.id);
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ error: 'Empty comment' });
+
+    const newComment = {
+      id: Date.now(),
+      postId,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      author: {
+        username: req.user.username,
+        firstName: req.user.firstName || req.user.username,
+        avatar: req.user.avatar
+      }
+    };
+
+    if (!inMemoryComments[postId]) inMemoryComments[postId] = [];
+    inMemoryComments[postId].unshift(newComment);
+
+    res.status(201).json(newComment);
+  } catch (e) {
+    res.status(500).json({ error: 'Comment failed' });
   }
 });
 
