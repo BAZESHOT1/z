@@ -1,66 +1,79 @@
 services:
-  postgres:
+  # ====== MASTER NODE ======
+  master-db:
     image: postgres:15-alpine
-    container_name: Z-postgres
+    container_name: Z-master-db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-zzzz}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}
-      POSTGRES_DB: ${POSTGRES_DB:-zzzz}
+      POSTGRES_USER: master_user
+      POSTGRES_PASSWORD: master_password
+      POSTGRES_DB: z_master
     ports:
       - "5435:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zzzz}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - master_db_data:/var/lib/postgresql/data
     networks:
       - Z-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: Z-redis
-    ports:
-      - "6453:6379"
-    networks:
-      - Z-network
-
-  # Основной управляющий узел
   master-backend:
     build:
-      context: ./backend-master
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: Z-master
+    container_name: Z-master-api
     ports:
       - "4000:3000"
-    command: sh -c "npx prisma db push && npm run dev"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-zzzz}:${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}@postgres:5432/${POSTGRES_DB:-zzzz}
-      - JWT_SECRET=${JWT_SECRET:-master_secret}
+      - DATABASE_URL=postgresql://master_user:master_password@master-db:5432/z_master
       - IS_MASTER_NODE=true
+      - JWT_SECRET=${JWT_SECRET:-master_key_777}
     depends_on:
-      postgres:
-        condition: service_healthy
+      - master-db
     networks:
       - Z-network
 
-  # Пример Community узла (может быть на другом сервере)
+  # ====== COMMUNITY NODE ======
+  community-db:
+    image: postgres:15-alpine
+    container_name: Z-community-db
+    environment:
+      POSTGRES_USER: community_user
+      POSTGRES_PASSWORD: community_password
+      POSTGRES_DB: z_community
+    ports:
+      - "5436:5432"
+    volumes:
+      - community_db_data:/var/lib/postgresql/data
+    networks:
+      - Z-network
+
+  community-s3:
+    image: minio/minio:latest
+    container_name: Z-community-s3
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    volumes:
+      - community_s3_data:/data
+    networks:
+      - Z-network
+
   community-backend:
     build:
       context: ./backend-community
       dockerfile: Dockerfile
-    container_name: Z-community
+    container_name: Z-community-api
     ports:
       - "4001:3000"
-    command: sh -c "npx prisma db push && npm run dev"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-zzzz}:${POSTGRES_PASSWORD:-sAMogyg6sAMogyg}@postgres:5432/${POSTGRES_DB:-zzzz}
+      - DATABASE_URL=postgresql://community_user:community_password@community-db:5432/z_community
       - MASTER_NODE_URL=http://master-backend:3000
       - IS_MASTER_NODE=false
     depends_on:
-      postgres:
-        condition: service_healthy
+      - community-db
+      - community-s3
     networks:
       - Z-network
 
@@ -69,4 +82,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  master_db_data:
+  community_db_data:
+  community_s3_data:
