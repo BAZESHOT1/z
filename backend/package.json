@@ -4,8 +4,8 @@
   "main": "dist/app.js",
   "scripts": {
     "build": "prisma generate && tsc",
-    "start": "prisma generate && prisma db push --accept-data-loss && node dist/app.js",
-    "dev": "prisma generate && prisma db push --accept-data-loss && ts-node-dev --respawn --transpile-only src/app.ts"
+    "start": "prisma generate && (npx prisma db push --accept-data-loss || npx prisma db push --force-reset) && node dist/app.js",
+    "dev": "prisma generate && (npx prisma db push --accept-data-loss || npx prisma db push --force-reset) && ts-node-dev --respawn --transpile-only src/app.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
